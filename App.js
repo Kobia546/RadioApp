@@ -64,10 +64,15 @@ export default function App() {
   ]);
   
   const [selectedAlarm, setSelectedAlarm] = useState(null);
-  const [newAlarm, setNewAlarm] = useState({ title: '', time: '07:00', type: 'prayer', content: '' });
   const [dailyVerse, setDailyVerse] = useState(BIBLICAL_VERSES[0]);
   const [showVerseModal, setShowVerseModal] = useState(false);
   const [showAlarmDetailModal, setShowAlarmDetailModal] = useState(false);
+  
+  // 🔥 NOUVEAU: États pour le modal d'ajout d'alarme
+  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false);
+  const [newAlarmTitle, setNewAlarmTitle] = useState('');
+  const [newAlarmTime, setNewAlarmTime] = useState('07:00');
+  const [newAlarmType, setNewAlarmType] = useState('prayer');
   
   // DateTimePicker States
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
@@ -100,151 +105,139 @@ export default function App() {
     }
   }, [isPlaying]);
 
-  // Fonction pour vérifier les alarmes
+  // 🔥 FONCTION AMÉLIORÉE: Vérification des alarmes
   useEffect(() => {
     const checkAlarms = () => {
       const now = new Date();
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       
+      console.log('Vérification alarmes:', currentTime);
+      
       alarms.forEach(alarm => {
         if (alarm.enabled && alarm.time === currentTime) {
+          console.log('Alarme déclenchée:', alarm.title);
           triggerAlarm(alarm);
         }
       });
     };
 
+    // Vérifier immédiatement
+    checkAlarms();
+    
+    // Puis vérifier chaque minute
     const interval = setInterval(checkAlarms, 60000);
     return () => clearInterval(interval);
   }, [alarms]);
 
-  // 🔥 NOUVELLE SOLUTION SIMPLE POUR AJOUTER ALARMES
-const showAddAlarmPrompt = () => {
-  console.log("showAddAlarmPrompt called");
-  Alert.prompt(
-    '➕ Nouvelle Alarme',
-    'Entrez le titre de votre alarme spirituelle :',
-    [
-      {
-        text: 'Annuler',
-        style: 'cancel',
-      },
-      {
-        text: 'Continuer',
-        onPress: (title) => {
-          if (title && title.trim()) {
-            showTimePickerForNewAlarm(title.trim());
-          } else {
-            Alert.alert('❌ Erreur', 'Veuillez entrer un titre');
-          }
-        },
-      },
-    ],
-    'plain-text',
-    '',
-    'default'
-  );
-};
-
-
-  const showTimePickerForNewAlarm = (title) => {
-     console.log("showTimePickerForNewAlarm called with title:", title);
-    const tempDate = new Date();
-    tempDate.setHours(7, 0, 0, 0);
-    setSelectedDate(tempDate);
-    setNewAlarm(prev => ({...prev, title: title}));
-    setShowDateTimePicker(true);
+  // 🔥 NOUVELLE FONCTION: Afficher le modal d'ajout d'alarme
+  const showAddAlarmModal_func = () => {
+    setNewAlarmTitle('');
+    setNewAlarmTime('07:00');
+    setNewAlarmType('prayer');
+    setShowAddAlarmModal(true);
   };
 
-  const onDateTimeChange = (event, selectedDate) => {
-    const currentDate = selectedDate || new Date();
-    setShowDateTimePicker(false);
-    setSelectedDate(currentDate);
-    
-    if (event.type === 'set') {
-      const hours = currentDate.getHours().toString().padStart(2, '0');
-      const minutes = currentDate.getMinutes().toString().padStart(2, '0');
-      const timeString = `${hours}:${minutes}`;
-      showTypeSelector(newAlarm.title, timeString);
+  // 🔥 NOUVELLE FONCTION: Valider et créer l'alarme
+  const createNewAlarm = () => {
+    if (!newAlarmTitle.trim()) {
+      Alert.alert('❌ Erreur', 'Veuillez entrer un titre pour l\'alarme');
+      return;
     }
-  };
 
-  const showTypeSelector = (title, time) => {
-    Alert.alert(
-      '🔔 Type d\'alarme',
-      'Choisissez le type d\'alarme :',
-      [
-        {
-          text: 'Annuler',
-          style: 'cancel',
-        },
-        {
-          text: '🙏 Prière',
-          onPress: () => createAlarmFinal(title, time, 'prayer'),
-        },
-        {
-          text: '📖 Verset',
-          onPress: () => createAlarmFinal(title, time, 'verse'),
-        },
-      ]
-    );
-  };
-
-  const createAlarmFinal = (title, time, type) => {
-    const alarm = {
+    const newAlarm = {
       id: Date.now(),
-      title: title,
-      time: time,
-      type: type,
+      title: newAlarmTitle.trim(),
+      time: newAlarmTime,
+      type: newAlarmType,
       enabled: true,
-      content: type === 'prayer' ? 
+      content: newAlarmType === 'prayer' ? 
         PRAYERS[Math.floor(Math.random() * PRAYERS.length)] :
         BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)]
     };
     
-    setAlarms([...alarms, alarm]);
-    setNewAlarm({ title: '', time: '07:00', type: 'prayer', content: '' });
+    setAlarms([...alarms, newAlarm]);
+    setShowAddAlarmModal(false);
     
-    Alert.alert('✅ Alarme créée !', `Votre alarme "${title}" à ${time} a été ajoutée avec succès !`);
+    Alert.alert('✅ Alarme créée !', `Votre alarme "${newAlarmTitle}" à ${newAlarmTime} a été ajoutée avec succès !`);
   };
 
-const triggerAlarm = (alarm) => {
-  Vibration.vibrate([0, 1000, 500, 1000]); // Vibration pattern
+  // 🔥 FONCTION AMÉLIORÉE: Déclencher une alarme
+  const triggerAlarm = (alarm) => {
+    console.log('Déclenchement alarme:', alarm.title);
+    
+    // Vibration plus courte
+    Vibration.vibrate([0, 500, 200, 500]);
 
-  Alert.alert(
-    `🔔 ${alarm.title}`,
-    alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : alarm.content.text,
-    [
+    const message = alarm.type === 'verse' ? 
+      `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
+      alarm.content.text;
+
+    Alert.alert(
+      `🔔 ${alarm.title}`,
+      message,
+      [
+        {
+          text: 'Amen 🙏',
+          style: 'default',
+          onPress: () => {
+            Vibration.cancel();
+          }
+        },
+        {
+          text: 'Rappeler dans 5 min',
+          onPress: () => {
+            Vibration.cancel();
+            scheduleSnooze(alarm);
+          }
+        },
+      ],
       {
-        text: 'Amen 🙏',
-        style: 'default',
-        onPress: () => {
-          Vibration.cancel(); // Arrêter la vibration
+        cancelable: false,
+        onDismiss: () => {
+          Vibration.cancel();
         }
-      },
-      {
-        text: 'Rappeler dans 5 min',
-        onPress: () => {
-          Vibration.cancel(); // Arrêter la vibration
-          scheduleSnooze(alarm); // Programmer un rappel
-        }
-      },
-    ],
-    {
-      cancelable: false,
-      onDismiss: () => {
-        Vibration.cancel(); // Arrêter la vibration si l'alerte est fermée
       }
-    }
-  );
-};
+    );
+  };
 
-// Fonction pour programmer un rappel
-const scheduleSnooze = (alarm) => {
-  setTimeout(() => {
-    Vibration.vibrate([0, 1000, 500, 1000]); // Vibration pattern
-    Alert.alert(`🔔 Rappel: ${alarm.title}`, "Il est temps de prier ou méditer 🙏");
-  }, 5 * 60 * 1000); // 5 minutes
-};
+  // 🔥 FONCTION AMÉLIORÉE: Programmer un rappel
+  const scheduleSnooze = (alarm) => {
+    console.log('Programmation rappel pour:', alarm.title);
+    
+    setTimeout(() => {
+      Vibration.vibrate([0, 500, 200, 500]);
+      Alert.alert(
+        `🔔 Rappel: ${alarm.title}`, 
+        "Il est temps de prier ou méditer 🙏",
+        [
+          {
+            text: 'Amen 🙏',
+            onPress: () => Vibration.cancel()
+          }
+        ]
+      );
+    }, 5 * 60 * 1000); // 5 minutes
+  };
+
+  // 🔥 FONCTION AMÉLIORÉE: Sélecteur d'heure
+  const showTimePicker = () => {
+    const tempDate = new Date();
+    const [hours, minutes] = newAlarmTime.split(':');
+    tempDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    setSelectedDate(tempDate);
+    setShowDateTimePicker(true);
+  };
+
+  const onDateTimeChange = (event, selectedDate) => {
+    setShowDateTimePicker(false);
+    
+    if (event.type === 'set' && selectedDate) {
+      const hours = selectedDate.getHours().toString().padStart(2, '0');
+      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      const timeString = `${hours}:${minutes}`;
+      setNewAlarmTime(timeString);
+    }
+  };
 
   // Animations
   const startRotationAnimation = () => {
@@ -446,7 +439,7 @@ const scheduleSnooze = (alarm) => {
         </View>
         
         <TouchableOpacity 
-          onPress={showAddAlarmPrompt}
+          onPress={showAddAlarmModal_func}
           style={styles.addButton}>
           <Text style={styles.addIcon}>+</Text>
         </TouchableOpacity>
@@ -464,53 +457,6 @@ const scheduleSnooze = (alarm) => {
             <Text style={styles.refreshVerseText}>🔄 Nouveau verset</Text>
           </TouchableOpacity>
         </View>
-        <Modal
-  visible={showAlarmDetailModal}
-  animationType="fade"
-  transparent={true}
-  onRequestClose={() => setShowAlarmDetailModal(false)}>
-  <KeyboardAvoidingView
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    style={styles.modalOverlay}>
-    <ScrollView
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.modalContainer}>
-      {selectedAlarm && (
-        <>
-          <Text style={styles.modalTitle}>🔔 {selectedAlarm.title}</Text>
-          <Text style={styles.alarmDetailTime}>⏰ {selectedAlarm.time}</Text>
-
-          <View style={styles.alarmContent}>
-            {selectedAlarm.type === 'verse' && (
-              <>
-                <Text style={styles.verseDetailText}>"{selectedAlarm.content.text}"</Text>
-                <Text style={styles.verseDetailRef}>— {selectedAlarm.content.ref}</Text>
-              </>
-            )}
-
-            {selectedAlarm.type === 'prayer' && (
-              <Text style={styles.prayerDetailText}>{selectedAlarm.content.text}</Text>
-            )}
-          </View>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Titre de l'alarme"
-            value={newAlarm.title}
-            onChangeText={(text) => setNewAlarm({ ...newAlarm, title: text })}
-            autoFocus={true}
-          />
-
-          <TouchableOpacity
-            style={styles.closeModalBtn}
-            onPress={() => setShowAlarmDetailModal(false)}>
-            <Text style={styles.closeModalText}>Fermer</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
-  </KeyboardAvoidingView>
-</Modal>
 
         {/* 🔥 CORRECTION 7: "Action d'aide à la Prière" et CORRECTION 8: Supprimer bouton Verset */}
         <View style={styles.quickActionsCard}>
@@ -563,7 +509,7 @@ const scheduleSnooze = (alarm) => {
             <View style={styles.noAlarmsContainer}>
               <Text style={styles.noAlarmsText}>Aucune alarme configurée</Text>
               <TouchableOpacity
-                onPress={showAddAlarmPrompt}
+                onPress={showAddAlarmModal_func}
                 style={styles.addFirstAlarmBtn}>
                 <Text style={styles.addFirstAlarmText}>➕ Créer ma première alarme</Text>
               </TouchableOpacity>
@@ -940,9 +886,89 @@ const scheduleSnooze = (alarm) => {
     );
   };
 
-  // Fonction pour rendre les autres modals
+  // 🔥 NOUVELLE FONCTION: Rendre tous les modals
   const renderOtherModals = () => (
     <>
+      {/* 🔥 NOUVEAU MODAL: Ajout d'alarme avec clavier stable */}
+      <Modal
+        visible={showAddAlarmModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddAlarmModal(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}>
+          <View style={styles.addAlarmModal}>
+            <Text style={styles.modalTitle}>➕ Nouvelle Alarme Spirituelle</Text>
+            
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Titre de l'alarme :</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ex: Prière du matin"
+                placeholderTextColor="#999"
+                value={newAlarmTitle}
+                onChangeText={setNewAlarmTitle}
+                autoFocus={false}
+                blurOnSubmit={false}
+              />
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Heure :</Text>
+              <TouchableOpacity 
+                style={styles.timeSelector}
+                onPress={showTimePicker}>
+                <Text style={styles.timeSelectorText}>⏰ {newAlarmTime}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Type :</Text>
+              <View style={styles.typeSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeOption,
+                    newAlarmType === 'prayer' && styles.typeOptionSelected
+                  ]}
+                  onPress={() => setNewAlarmType('prayer')}>
+                  <Text style={[
+                    styles.typeOptionText,
+                    newAlarmType === 'prayer' && styles.typeOptionTextSelected
+                  ]}>🙏 Prière</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.typeOption,
+                    newAlarmType === 'verse' && styles.typeOptionSelected
+                  ]}
+                  onPress={() => setNewAlarmType('verse')}>
+                  <Text style={[
+                    styles.typeOptionText,
+                    newAlarmType === 'verse' && styles.typeOptionTextSelected
+                  ]}>📖 Verset</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowAddAlarmModal(false)}>
+                <Text style={styles.cancelBtnText}>Annuler</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={createNewAlarm}>
+                <Text style={styles.createBtnText}>Créer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* Modal pour les détails d'alarme */}
       <Modal
         visible={showAlarmDetailModal}
@@ -1018,7 +1044,7 @@ const scheduleSnooze = (alarm) => {
   );
 }
 
-// 🔥 STYLES AVEC TOUTES LES CORRECTIONS CLIENT
+// 🔥 STYLES AVEC TOUTES LES CORRECTIONS CLIENT + NOUVEAU MODAL
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1027,6 +1053,109 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a4a1a', // 🔥 CORRECTION 1: Fond vert sombre
+  },
+  
+  // 🔥 NOUVEAU: Styles pour le modal d'ajout d'alarme
+  addAlarmModal: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 25,
+    width: width * 0.9,
+    maxHeight: height * 0.8,
+    alignSelf: 'center',
+  },
+  inputSection: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  textInput: {
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    color: '#333',
+  },
+  timeSelector: {
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+  },
+  timeSelectorText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  typeOption: {
+    flex: 1,
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+  },
+  typeOptionSelected: {
+    borderColor: '#4caf50',
+    backgroundColor: '#e8f5e8',
+  },
+  typeOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  typeOptionTextSelected: {
+    color: '#4caf50',
+    fontWeight: 'bold',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 15,
+    marginTop: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 50,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+  },
+  cancelBtnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  createBtn: {
+    flex: 1,
+    height: 50,
+    backgroundColor: '#4caf50',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createBtnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
   
   // 🔥 CORRECTION 9: Menu avec boutons gris clair
@@ -1460,14 +1589,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 10,
   },
-    input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginBottom: 20,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-  },
   verseText: {
     fontSize: 16,
     color: '#ffffff',
@@ -1600,12 +1721,6 @@ const styles = StyleSheet.create({
   },
   
   // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   modalContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
@@ -1693,19 +1808,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
   },
-  modalOverlay: {
-  flex: 1,
-  backgroundColor: 'rgba(0,0,0,0.7)',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-modalContainer: {
-  backgroundColor: '#ffffff',
-  borderRadius: 20,
-  padding: 25,
-  width: width * 0.9,
-  maxHeight: height * 0.8,
-},
   newVerseText: {
     fontSize: 14,
     fontWeight: '600',
