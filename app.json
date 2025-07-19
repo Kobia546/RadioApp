@@ -1,53 +1,74 @@
 {
   "expo": {
-    "name": "Radioci",
-    "slug": "Radioci",
+    "name": "radio-bonne-nouvelle",
+    "slug": "radio-bonne-nouvelle",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.jpeg",
-    "scheme": "radioci",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "icon": "./assets/images/Logo.jpeg",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/Logo.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#2e7d32"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.radiobonnenouvelle.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "background-processing"
+        ],
+        "NSMicrophoneUsageDescription": "Cette app utilise le microphone pour les fonctionnalités audio.",
+        "NSCameraUsageDescription": "Cette app utilise la caméra pour les fonctionnalités média."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.jpeg",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/Logo.jpeg",
+        "backgroundColor": "#2e7d32"
       },
-      "edgeToEdgeEnabled": true,
+      "package": "com.radiobonnenouvelle.app",
+      "versionCode": 1,
       "permissions": [
+        "INTERNET",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
-      ],
-      "package": "com.mambo12.Radioci"
+      ]
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router",
+   
       [
-        "expo-splash-screen",
+        "expo-av",
         {
-          "image": "./assets/images/logo.jpeg",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "microphonePermission": "Autoriser l'accès au microphone pour les fonctionnalités audio."
         }
-      ],
-      "expo-audio"
+      ]
     ],
-    "experiments": {
-      "typedRoutes": true
+    "notification": {
+      "icon": "./assets/images/Logo.jpeg",
+      "color": "#2e7d32",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Radio Bonne Nouvelle"
     },
     "extra": {
-      "router": {},
       "eas": {
-        "projectId": "e687b53e-e3a3-4715-80b9-b3d6e6ee7288"
+        "projectId": "b1e019c0-1671-4913-b050-72176e18717c"
       }
     }
   }

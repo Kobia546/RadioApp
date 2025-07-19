@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useRef } from 'react';
 import {
   SafeAreaView,
   StatusBar,
@@ -14,8 +13,12 @@ import {
   Modal,
   TextInput,
   Switch,
+  Vibration,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import React, { useCallback } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useState, useRef, useEffect } from 'react';
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,13 +43,17 @@ const PRAYERS = [
 ];
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('home');
+  // États principaux
+  const [currentScreen, setCurrentScreen] = useState('radio');
   const [showPlayer, setShowPlayer] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [currentTrack, setCurrentTrack] = useState('Radio Bonne Nouvelle');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSimpleAlarmModal, setShowSimpleAlarmModal] = useState(false);
+const [alarmTitle, setAlarmTitle] = useState('');
 
   // États pour les alarmes spirituelles
   const [alarms, setAlarms] = useState([
@@ -55,20 +62,20 @@ export default function App() {
     { id: 3, title: "Prière du soir", time: "20:00", enabled: false, type: "prayer", content: PRAYERS[2] },
   ]);
   
-  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false);
-  const [showAlarmDetailModal, setShowAlarmDetailModal] = useState(false);
   const [selectedAlarm, setSelectedAlarm] = useState(null);
   const [newAlarm, setNewAlarm] = useState({ title: '', time: '07:00', type: 'prayer', content: '' });
   const [dailyVerse, setDailyVerse] = useState(BIBLICAL_VERSES[0]);
   const [showVerseModal, setShowVerseModal] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [selectedHour, setSelectedHour] = useState(7);
-  const [selectedMinute, setSelectedMinute] = useState(0);
+  const [showAlarmDetailModal, setShowAlarmDetailModal] = useState(false);
+  
+  // DateTimePicker States
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Références pour les animations
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(300)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -78,15 +85,10 @@ export default function App() {
   const radioPlayerUrl = 'https://a4.asurahosting.com/public/radio_bonne_nouvelle/embed?theme=light';
 
   useEffect(() => {
-    if (currentScreen === 'radio' || currentScreen === 'alarms') {
-      startEntranceAnimation();
-    }
     startRotationAnimation();
-    
-    // Changer le verset du jour quotidiennement
     const today = new Date().getDay();
     setDailyVerse(BIBLICAL_VERSES[today % BIBLICAL_VERSES.length]);
-  }, [currentScreen]);
+  }, []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -109,45 +111,174 @@ export default function App() {
         }
       });
     };
+    const showAddAlarmPrompt = () => {
+  setAlarmTitle('');
+  setShowSimpleAlarmModal(true);
+};
 
-    const interval = setInterval(checkAlarms, 60000); // Vérifier chaque minute
+// 3. FONCTION POUR CONTINUER APRÈS LE TITRE :
+const continueWithAlarmCreation = () => {
+  if (alarmTitle.trim()) {
+    setShowSimpleAlarmModal(false);
+    showTimePickerForNewAlarm(alarmTitle.trim());
+  } else {
+    Alert.alert('❌ Erreur', 'Veuillez entrer un titre');
+  }
+};
+
+    const interval = setInterval(checkAlarms, 60000);
     return () => clearInterval(interval);
   }, [alarms]);
 
-  const triggerAlarm = (alarm) => {
-    Alert.alert(
-      `🔔 ${alarm.title}`,
-      alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
-      alarm.type === 'prayer' ? alarm.content.text : alarm.content,
+  // 🔥 NOUVELLE SOLUTION SIMPLE POUR AJOUTER ALARMES
+  const showAddAlarmPrompt = () => {
+    Alert.prompt(
+      '➕ Nouvelle Alarme',
+      'Entrez le titre de votre alarme spirituelle :',
       [
-        { text: 'Amen 🙏', style: 'default' },
-        { text: 'Rappeler dans 5 min', onPress: () => scheduleSnooze(alarm) },
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+        {
+          text: 'Continuer',
+          onPress: (title) => {
+            if (title && title.trim()) {
+              showTimePickerForNewAlarm(title.trim());
+            } else {
+              Alert.alert('❌ Erreur', 'Veuillez entrer un titre');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      '',
+      'default'
+    );
+  };
+
+  const showTimePickerForNewAlarm = (title) => {
+    const tempDate = new Date();
+    tempDate.setHours(7, 0, 0, 0);
+    setSelectedDate(tempDate);
+    setNewAlarm(prev => ({...prev, title: title}));
+    setShowDateTimePicker(true);
+  };
+
+  const onDateTimeChange = (event, selectedDate) => {
+    const currentDate = selectedDate || new Date();
+    setShowDateTimePicker(false);
+    setSelectedDate(currentDate);
+    
+    if (event.type === 'set') {
+      const hours = currentDate.getHours().toString().padStart(2, '0');
+      const minutes = currentDate.getMinutes().toString().padStart(2, '0');
+      const timeString = `${hours}:${minutes}`;
+      showTypeSelector(newAlarm.title, timeString);
+    }
+  };
+
+  const showTypeSelector = (title, time) => {
+    Alert.alert(
+      '🔔 Type d\'alarme',
+      'Choisissez le type d\'alarme :',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+        {
+          text: '🙏 Prière',
+          onPress: () => createAlarmFinal(title, time, 'prayer'),
+        },
+        {
+          text: '📖 Verset',
+          onPress: () => createAlarmFinal(title, time, 'verse'),
+        },
       ]
     );
   };
 
+  const createAlarmFinal = (title, time, type) => {
+    const alarm = {
+      id: Date.now(),
+      title: title,
+      time: time,
+      type: type,
+      enabled: true,
+      content: type === 'prayer' ? 
+        PRAYERS[Math.floor(Math.random() * PRAYERS.length)] :
+        BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)]
+    };
+    
+    setAlarms([...alarms, alarm]);
+    setNewAlarm({ title: '', time: '07:00', type: 'prayer', content: '' });
+    
+    Alert.alert('✅ Alarme créée !', `Votre alarme "${title}" à ${time} a été ajoutée avec succès !`);
+  };
+
+  const triggerAlarm = async (alarm) => {
+    try {
+      console.log('🔔 Déclenchement alarme:', alarm.title);
+      Vibration.vibrate([0, 1000, 500, 1000, 500, 1000]);
+      
+      Alert.alert(
+        `🔔 ${alarm.title}`,
+        alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
+        alarm.content.text,
+        [
+          { 
+            text: 'Amen 🙏', 
+            style: 'default', 
+            onPress: () => {
+              Vibration.cancel();
+              console.log('✅ Alarme arrêtée - Amen');
+            }
+          },
+          { 
+            text: 'Rappeler dans 5 min', 
+            onPress: () => {
+              Vibration.cancel();
+              scheduleSnooze(alarm);
+              console.log('⏰ Alarme reportée 5 min');
+            }
+          },
+        ],
+        { 
+          cancelable: false,
+          onDismiss: () => {
+            Vibration.cancel();
+          }
+        }
+      );
+
+    } catch (error) {
+      console.log('Erreur alarme:', error);
+      Vibration.vibrate([0, 1000, 500, 1000]);
+      Alert.alert(
+        `🔔 ${alarm.title}`,
+        alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
+        alarm.content.text,
+        [
+          { 
+            text: 'Amen 🙏', 
+            onPress: () => {
+              Vibration.cancel();
+            }
+          }
+        ]
+      );
+    }
+  };
+
   const scheduleSnooze = (alarm) => {
     setTimeout(() => {
+      Vibration.vibrate([0, 1000, 500, 1000]);
       Alert.alert(`🔔 Rappel: ${alarm.title}`, "Il est temps de prier ou méditer 🙏");
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 5 * 60 * 1000);
   };
 
-  const startEntranceAnimation = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
+  // Animations
   const startRotationAnimation = () => {
     Animated.loop(
       Animated.timing(rotateAnim, {
@@ -194,11 +325,11 @@ export default function App() {
     }).start();
   };
 
+  // 🔥 CORRECTION 4: Bouton reload lance aussi la radio
   const showRadioPlayer = () => {
     setIsLoading(true);
     setShowPlayer(true);
     
-    // Animation d'entrée du player
     Animated.spring(slideAnim, {
       toValue: 0,
       tension: 100,
@@ -206,7 +337,6 @@ export default function App() {
       useNativeDriver: true,
     }).start();
 
-    // Simulation de chargement puis auto-play
     setTimeout(() => {
       setIsLoading(false);
       setIsConnected(true);
@@ -229,46 +359,20 @@ export default function App() {
     });
   };
 
+  // 🔥 CORRECTION 4: reloadPlayer lance automatiquement la radio
   const reloadPlayer = () => {
-    setIsLoading(true);
-    setWebViewKey(prev => prev + 1);
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsConnected(true);
-      setIsPlaying(true);
-    }, 2000);
-  };
-
-  const togglePlayback = () => {
     if (!showPlayer) {
+      // Si le player n'est pas ouvert, on l'ouvre
       showRadioPlayer();
     } else {
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const addAlarm = () => {
-    if (newAlarm.title.trim()) {
-      const timeStr = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
-      const alarm = {
-        id: Date.now(),
-        title: newAlarm.title.trim(),
-        time: timeStr,
-        type: newAlarm.type,
-        enabled: true,
-        content: newAlarm.type === 'prayer' ? 
-          PRAYERS[Math.floor(Math.random() * PRAYERS.length)] :
-          BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)]
-      };
-      
-      setAlarms([...alarms, alarm]);
-      setNewAlarm({ title: '', time: '07:00', type: 'prayer', content: '' });
-      setSelectedHour(7);
-      setSelectedMinute(0);
-      setShowAddAlarmModal(false);
-      Alert.alert('✅ Alarme ajoutée', 'Votre alarme spirituelle a été créée avec succès!');
-    } else {
-      Alert.alert('❌ Erreur', 'Veuillez entrer un titre pour l\'alarme');
+      // Si le player est ouvert, on le recharge
+      setIsLoading(true);
+      setWebViewKey(prev => prev + 1);
+      setTimeout(() => {
+        setIsLoading(false);
+        setIsConnected(true);
+        setIsPlaying(true);
+      }, 2000);
     }
   };
 
@@ -302,63 +406,70 @@ export default function App() {
     setShowVerseModal(true);
   };
 
-  const HomeScreen = () => (
-    <View style={styles.container}>
-      <LinearGradient colors={['#1a1a1a', '#2e7d32']} style={styles.headerGradient}>
-        <Text style={styles.headerTitle}>Radio Bonne Nouvelle</Text>
-        <Text style={styles.headerSubtitle}>Le canal de la Grandeur • 103.6 FM</Text>
-      </LinearGradient>
-      
-      <View style={styles.menuContainer}>
-        {[
-          { icon: '📻', title: 'Ma Radio', subtitle: 'Écouter la Parole en direct', action: () => setCurrentScreen('radio'), primary: true },
-          { icon: '📘', title: 'Facebook', subtitle: 'Communauté de foi', action: () => Alert.alert('Facebook', 'Rejoignez notre communauté de foi!') },
-          { icon: '🔔', title: 'Alarmes Spirituelles', subtitle: 'Rappels et méditations', action: () => setCurrentScreen('alarms') },
-        ].map((item, index) => (
-          <Animated.View
-            key={index}
-            style={[
-              styles.menuItemContainer,
-              {
-                transform: [{
-                  translateY: fadeAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  })
-                }],
-                opacity: fadeAnim,
-              }
-            ]}>
-            <TouchableOpacity
-              style={[styles.menuItem, item.primary && styles.primaryMenuItem]}
-              onPress={item.action}
-              activeOpacity={0.8}>
-              <View style={[styles.menuIcon, item.primary && styles.primaryIcon]}>
-                <Text style={styles.menuIconText}>{item.icon}</Text>
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={[styles.menuText, item.primary && styles.primaryText]}>{item.title}</Text>
-                <Text style={[styles.menuSubtext, item.primary && styles.primarySubtext]}>{item.subtitle}</Text>
-              </View>
-              <View style={[styles.arrowContainer, item.primary && styles.primaryArrow]}>
-                <Text style={styles.arrow}>▶</Text>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
+  // 🔥 CORRECTION 9: Boutons menu gris clair
+  const MenuOverlay = () => (
+    <Modal
+      visible={showMenu}
+      animationType="fade"
+      transparent={true}
+      onRequestClose={() => setShowMenu(false)}>
+      <View style={styles.menuOverlay}>
+        <View style={styles.menuModal}>
+          <Text style={styles.menuModalTitle}>📻 Menu</Text>
+          
+          <TouchableOpacity
+            style={[styles.menuModalItem, currentScreen === 'radio' && styles.activeMenuItem]}
+            onPress={() => {
+              setCurrentScreen('radio');
+              setShowMenu(false);
+            }}>
+            <Text style={styles.menuModalIcon}>📻</Text>
+            <Text style={[styles.menuModalText, currentScreen === 'radio' && {color: '#ffffff'}]}>Ma Radio</Text>
+            {currentScreen === 'radio' && <Text style={styles.activeIndicator}>●</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuModalItem}
+            onPress={() => {
+              Alert.alert('Facebook', 'Rejoignez notre communauté de foi!');
+              setShowMenu(false);
+            }}>
+            <Text style={styles.menuModalIcon}>📘</Text>
+            <Text style={styles.menuModalText}>Facebook</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuModalItem, currentScreen === 'alarms' && styles.activeMenuItem]}
+            onPress={() => {
+              setCurrentScreen('alarms');
+              setShowMenu(false);
+            }}>
+            <Text style={styles.menuModalIcon}>🔔</Text>
+            <Text style={[styles.menuModalText, currentScreen === 'alarms' && {color: '#ffffff'}]}>Alarmes Spirituelles</Text>
+            {currentScreen === 'alarms' && <Text style={styles.activeIndicator}>●</Text>}
+          </TouchableOpacity>
+
+          {/* 🔥 CORRECTION 10: Bouton Fermer gris sombre */}
+          <TouchableOpacity
+            style={styles.menuModalClose}
+            onPress={() => setShowMenu(false)}>
+            <Text style={styles.menuModalCloseText}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 
+  // Composant Écran des Alarmes
   const AlarmsScreen = () => (
-    <View style={styles.radioContainer}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
       
-      <Animated.View style={[styles.radioHeader, { opacity: fadeAnim }]}>
+      <View style={styles.radioHeader}>
         <TouchableOpacity 
-          onPress={() => setCurrentScreen('home')}
+          onPress={() => setShowMenu(true)}
           style={styles.backButton}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
@@ -367,28 +478,28 @@ export default function App() {
         </View>
         
         <TouchableOpacity 
-          onPress={() => setShowAddAlarmModal(true)}
+          onPress={showAddAlarmPrompt}
           style={styles.addButton}>
           <Text style={styles.addIcon}>+</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       <ScrollView style={styles.alarmsScrollView} showsVerticalScrollIndicator={false}>
-        {/* Verset du jour */}
-        <Animated.View style={[styles.verseCard, { opacity: fadeAnim }]}>
+        {/* 🔥 CORRECTION 6: "Verset à méditer" */}
+        <View style={styles.verseCard}>
           <TouchableOpacity onPress={() => setShowVerseModal(true)}>
-            <Text style={styles.verseTitle}>📖 Verset du jour</Text>
+            <Text style={styles.verseTitle}>📖 Verset à méditer</Text>
             <Text style={styles.verseText}>"{dailyVerse.text}"</Text>
             <Text style={styles.verseRef}>— {dailyVerse.ref}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={getRandomVerse} style={styles.refreshVerseBtn}>
             <Text style={styles.refreshVerseText}>🔄 Nouveau verset</Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
 
-        {/* Actions rapides */}
-        <Animated.View style={[styles.quickActionsCard, { opacity: fadeAnim }]}>
-          <Text style={styles.quickActionsTitle}>Actions rapides</Text>
+        {/* 🔥 CORRECTION 7: "Action d'aide à la Prière" et CORRECTION 8: Supprimer bouton Verset */}
+        <View style={styles.quickActionsCard}>
+          <Text style={styles.quickActionsTitle}>Action d'aide à la Prière</Text>
           <View style={styles.quickActionsRow}>
             <TouchableOpacity style={styles.quickActionBtn} onPress={() => {
               Alert.alert('🙏 Prière', PRAYERS[Math.floor(Math.random() * PRAYERS.length)].text);
@@ -396,19 +507,11 @@ export default function App() {
               <Text style={styles.quickActionIcon}>🙏</Text>
               <Text style={styles.quickActionText}>Prière</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.quickActionBtn} onPress={() => {
-              const verse = BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)];
-              Alert.alert('📖 Verset', `${verse.text}\n\n— ${verse.ref}`);
-            }}>
-              <Text style={styles.quickActionIcon}>📖</Text>
-              <Text style={styles.quickActionText}>Verset</Text>
-            </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Liste des alarmes */}
-        <Animated.View style={[styles.alarmsListCard, { opacity: fadeAnim }]}>
+        <View style={styles.alarmsListCard}>
           <Text style={styles.alarmsListTitle}>Mes alarmes ({alarms.length})</Text>
           
           {alarms.map((alarm) => (
@@ -445,170 +548,386 @@ export default function App() {
             <View style={styles.noAlarmsContainer}>
               <Text style={styles.noAlarmsText}>Aucune alarme configurée</Text>
               <TouchableOpacity
-                onPress={() => setShowAddAlarmModal(true)}
+                onPress={showAddAlarmPrompt}
                 style={styles.addFirstAlarmBtn}>
                 <Text style={styles.addFirstAlarmText}>➕ Créer ma première alarme</Text>
               </TouchableOpacity>
             </View>
           )}
-        </Animated.View>
+        </View>
       </ScrollView>
 
-      {/* Modal pour ajouter une alarme */}
-      <Modal
-        visible={showAddAlarmModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowAddAlarmModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>➕ Nouvelle alarme spirituelle</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Titre de l'alarme</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Ex: Prière du matin, Lecture biblique..."
-                value={newAlarm.title}
-                onChangeText={(text) => setNewAlarm({...newAlarm, title: text})}
-                autoFocus={true}
-                maxLength={50}
-                returnKeyType="done"
-              />
+      {/* DateTimePicker */}
+      {showDateTimePicker && (
+        <DateTimePicker
+          testID="dateTimePicker"
+          value={selectedDate}
+          mode="time"
+          is24Hour={true}
+          display="default"
+          onChange={onDateTimeChange}
+        />
+      )}
+
+      {/* Autres modals */}
+      {renderOtherModals()}
+    </View>
+  );
+
+  // Composant Écran Radio
+  const RadioScreen = () => {
+    const rotation = rotateAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
+    });
+
+    const progressWidth = progressAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
+    });
+
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+
+        {/* Header */}
+        <View style={styles.radioHeader}>
+          <TouchableOpacity
+            onPress={() => setShowMenu(true)}
+            style={styles.backButton}>
+            <Text style={styles.menuIcon}>☰</Text>
+          </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.stationName}>Radio Bonne Nouvelle</Text>
+            <Text style={styles.headerSubtitle1}>Le canal de la Grandeur</Text>
+            <Text style={styles.headerSubtitle}>103.6</Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, isConnected && styles.activeDot]} />
+              <Text style={styles.statusText}>
+                {isConnected ? 'EN DIRECT' : 'HORS LIGNE'}
+              </Text>
             </View>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Heure de l'alarme</Text>
-              <TouchableOpacity 
-                style={styles.timePickerButton}
-                onPress={() => setShowTimePicker(true)}>
-                <Text style={styles.timePickerText}>
-                  {selectedHour.toString().padStart(2, '0')}:{selectedMinute.toString().padStart(2, '0')}
-                </Text>
-                <Text style={styles.timePickerIcon}>🕐</Text>
-              </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={reloadPlayer}
+            style={styles.reloadButton}>
+            <Animated.View style={{ transform: [{ rotate: isLoading ? rotation : '0deg' }] }}>
+              <Text style={styles.reloadIcon}>⟳</Text>
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Album Art */}
+        <View style={styles.albumSection}>
+          <Animated.View
+            style={[
+              styles.radioWaveContainer,
+              {
+                transform: [
+                  { scale: pulseAnim }
+                ]
+              }
+            ]}>
+            <View style={styles.radioTower}>
+              {/* Central Radio Antenna */}
+              <View style={styles.antenna}>
+                <View style={styles.antennaBase} />
+                <View style={styles.antennaRod} />
+                <View style={styles.antennaTop} />
+              </View>
+
+              {/* 🔥 CORRECTION 2: Ondes gris → blanc */}
+              {isPlaying && [1, 2, 3, 4].map(i => (
+                <Animated.View
+                  key={i}
+                  style={[
+                    styles.radioWave,
+                    styles[`wave${i}`],
+                    {
+                      opacity: pulseAnim.interpolate({
+                        inputRange: [1, 1.05],
+                        outputRange: [0.3, 0.8],
+                      }),
+                      transform: [{
+                        scale: pulseAnim.interpolate({
+                          inputRange: [1, 1.05],
+                          outputRange: [1, 1.2],
+                        })
+                      }]
+                    }
+                  ]}
+                />
+              ))}
+
+              {/* Central Logo */}
+              <View style={styles.radioLogo}>
+                <Text style={styles.logoText}>RBN</Text>
+                <Text style={styles.logoSubtext}>📻</Text>
+              </View>
             </View>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Type d'alarme</Text>
-              <View style={styles.typeSelector}>
-                {[
-                  { value: 'prayer', label: '🙏 Prière' },
-                  { value: 'verse', label: '📖 Verset biblique' }
-                ].map(type => (
-                  <TouchableOpacity
-                    key={type.value}
+          </Animated.View>
+
+          <View style={styles.trackInfo}>
+            {/* 🔥 CORRECTION 3: Live Broadcast vert / Broadcast Offline rouge */}
+            <Text style={styles.trackTitle}>
+              {isConnected ? '🔴 Live Broadcast' : '🔴 Broadcast Offline'}
+            </Text>
+
+            {isPlaying && (
+              <Animated.View style={styles.waveform}>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <Animated.View
+                    key={i}
                     style={[
-                      styles.typeOption,
-                      newAlarm.type === type.value && styles.selectedType
+                      styles.waveBar,
+                      {
+                        transform: [{
+                          scaleY: pulseAnim.interpolate({
+                            inputRange: [1, 1.05],
+                            outputRange: [0.5, 1.5],
+                          })
+                        }]
+                      }
                     ]}
-                    onPress={() => setNewAlarm({...newAlarm, type: type.value})}>
-                    <Text style={[
-                      styles.typeText,
-                      newAlarm.type === type.value && styles.selectedTypeText
-                    ]}>{type.label}</Text>
-                  </TouchableOpacity>
+                  />
                 ))}
-              </View>
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setShowAddAlarmModal(false);
-                  setNewAlarm({ title: '', time: '07:00', type: 'prayer', content: '' });
-                  setSelectedHour(7);
-                  setSelectedMinute(0);
-                }}>
-                <Text style={styles.cancelText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={addAlarm}>
-                <Text style={styles.saveText}>Créer l'alarme</Text>
-              </TouchableOpacity>
-            </View>
+              </Animated.View>
+            )}
           </View>
         </View>
-      </Modal>
 
-      {/* Modal sélecteur d'heure */}
-      <Modal
-        visible={showTimePicker}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowTimePicker(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.timePickerModal}>
-            <Text style={styles.timePickerTitle}>🕐 Choisir l'heure</Text>
-            
-            <View style={styles.timePickerContainer}>
-              <View style={styles.timeColumn}>
-                <Text style={styles.timeColumnTitle}>Heure</Text>
-                <ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>
-                  {Array.from({length: 24}, (_, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.timeOption,
-                        selectedHour === i && styles.selectedTimeOption
-                      ]}
-                      onPress={() => setSelectedHour(i)}>
-                      <Text style={[
-                        styles.timeOptionText,
-                        selectedHour === i && styles.selectedTimeText
-                      ]}>
-                        {i.toString().padStart(2, '0')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              
-              <Text style={styles.timeSeparator}>:</Text>
-              
-              <View style={styles.timeColumn}>
-                <Text style={styles.timeColumnTitle}>Minutes</Text>
-                <ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>
-                  {[0, 15, 30, 45].map((minute) => (
-                    <TouchableOpacity
-                      key={minute}
-                      style={[
-                        styles.timeOption,
-                        selectedMinute === minute && styles.selectedTimeOption
-                      ]}
-                      onPress={() => setSelectedMinute(minute)}>
-                      <Text style={[
-                        styles.timeOptionText,
-                        selectedMinute === minute && styles.selectedTimeText
-                      ]}>
-                        {minute.toString().padStart(2, '0')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+        {/* Player Controls */}
+        <View style={styles.controlsSection}>
+          {(isPlaying || isLoading) && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressTrack}>
+                <Animated.View
+                  style={[
+                    styles.progressFill,
+                    { width: isLoading ? '30%' : progressWidth }
+                  ]}
+                />
               </View>
             </View>
-            
-            <View style={styles.timePickerButtons}>
-              <TouchableOpacity
-                style={styles.timePickerCancel}
-                onPress={() => setShowTimePicker(false)}>
-                <Text style={styles.timePickerCancelText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.timePickerConfirm}
-                onPress={() => {
-                  setShowTimePicker(false);
-                }}>
-                <Text style={styles.timePickerConfirmText}>Confirmer</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          )}
         </View>
-      </Modal>
 
+        {/* WebView Player */}
+        {showPlayer && (
+          <Animated.View
+            style={[
+              styles.playerContainer,
+              {
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}>
+            <View style={styles.playerHeader}>
+              <Text style={styles.playerTitle}>📻 Radio En ligne</Text>
+              <TouchableOpacity onPress={hidePlayer} style={styles.closePlayer}>
+                <Text style={styles.closeIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+           <WebView
+  key={webViewKey}
+  source={{ uri: radioPlayerUrl }}
+  style={styles.webView}
+  javaScriptEnabled={true}
+  domStorageEnabled={true}
+  mediaPlaybackRequiresUserAction={false}
+  allowsInlineMediaPlayback={true}
+  startInLoadingState={true}
+  renderLoading={() => (
+    <View style={styles.loadingOverlay}>
+      <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+        <Text style={styles.loadingSpinner}>⟳</Text>
+      </Animated.View>
+      <Text style={styles.loadingText}>Chargement...</Text>
+    </View>
+  )}
+  onLoad={() => {
+    console.log('Player chargé!');
+    setIsLoading(false);
+    setIsConnected(true);
+    setIsPlaying(true);
+
+    setTimeout(() => {
+      webViewRef.current?.injectJavaScript(`
+        try {
+          console.log('🎵 Auto-play: Recherche du bouton play...');
+          let found = false;
+
+          const selectors = [
+            'button.btn.p-0.radio-control-play-button.btn-xl[title="Play"]',
+            'button.radio-control-play-button[aria-label="Play"]',
+            'button[class*="radio-control-play-button"]',
+            '.radio-control-play-button',
+            'button.btn.p-0.radio-control-play-button',
+            'div.radio-controls button[title="Play"]',
+            'button[type="button"][title="Play"][aria-label="Play"]'
+          ];
+
+          for (const selector of selectors) {
+            const btn = document.querySelector(selector);
+            if (btn && !found) {
+              const event = new MouseEvent('click', {
+                view: window,
+                bubbles: true,
+                cancelable: true
+              });
+              btn.dispatchEvent(event);
+              console.log('✅ Auto-click réussi avec:', selector);
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            const allButtons = document.querySelectorAll('button, [role="button"]');
+            allButtons.forEach(btn => {
+              const classes = btn.className || '';
+              const title = btn.getAttribute('title') || '';
+              const ariaLabel = btn.getAttribute('aria-label') || '';
+              
+              if ((classes.includes('radio-control-play-button') || 
+                   title === 'Play' || ariaLabel === 'Play') && !found) {
+                
+                btn.click();
+                setTimeout(() => btn.click(), 100);
+                setTimeout(() => btn.click(), 200);
+                
+                console.log('✅ Auto-click par classe/attribut');
+                found = true;
+              }
+            });
+          }
+
+          if (found) {
+            setTimeout(() => {
+              const audioElements = document.querySelectorAll('audio, video');
+              audioElements.forEach(audio => {
+                if (audio.paused) {
+                  audio.play().catch(e => console.log('Audio autoplay blocked:', e));
+                }
+              });
+              
+              const currentTitle = document.querySelector('.now-playing-title');
+              const currentArtist = document.querySelector('.now-playing-artist');
+              
+              if (currentTitle) {
+                const title = currentTitle.textContent || 'Live Broadcast';
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                  type: 'currentTrack',
+                  title: title,
+                  artist: currentArtist?.textContent || ''
+                }));
+              }
+              
+              window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'playbackStarted'
+              }));
+            }, 1000);
+          }
+
+          if (!found) {
+            console.log('❌ Bouton play non trouvé automatiquement');
+          }
+
+        } catch(e) {
+          console.log('❌ Erreur auto-play:', e);
+        }
+        true;
+      `);
+    }, 3000);
+
+    setTimeout(() => {
+      webViewRef.current?.injectJavaScript(`
+        const titleObserver = () => {
+          const titleElement = document.querySelector('.now-playing-title, h4.now-playing-title, .current-title');
+          if (titleElement) {
+            const observer = new MutationObserver(() => {
+              const newTitle = titleElement.textContent || 'Live Broadcast';
+              console.log('🎵 Titre changé:', newTitle);
+              window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'trackChanged',
+                title: newTitle
+              }));
+            });
+
+            observer.observe(titleElement, {
+              childList: true,
+              subtree: true,
+              characterData: true
+            });
+          }
+        };
+        
+        titleObserver();
+        true;
+      `);
+    }, 5000);
+  }}
+  onMessage={(event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+
+      if (data.type === 'currentTrack') {
+        setCurrentTrack('🔴 Live Broadcast');
+        console.log('Titre reçu:', data.title);
+      }
+
+      if (data.type === 'playbackStarted') {
+        setIsPlaying(true);
+        setIsConnected(true);
+        console.log('Playback démarré automatiquement!');
+      }
+
+    } catch (e) {
+      console.log('Erreur parsing message:', e);
+    }
+  }}
+  onError={() => {
+    Alert.alert('Erreur', 'Impossible de charger le player');
+    setIsLoading(false);
+  }}
+  ref={webViewRef}
+/>
+          </Animated.View>
+        )}
+
+        {/* Bottom Controls */}
+        <View style={styles.bottomControls}>
+          {!showPlayer ? (
+            <TouchableOpacity
+              style={styles.showPlayerBtn}
+              onPress={showRadioPlayer}>
+              <Text style={styles.showPlayerText}>📻 Écouter la Radio</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.playerControls}>
+              {/* 🔥 CORRECTION 3: Bouton coloré selon l'état */}
+              <TouchableOpacity
+                style={[
+                  styles.statusButton,
+                  isConnected ? styles.statusButtonOnline : styles.statusButtonOffline
+                ]}
+                onPress={() => Alert.alert('Statut', isConnected ? 'Radio en ligne' : 'Radio hors ligne')}>
+                <Text style={styles.statusButtonText}>
+                  {isConnected ? 'Live Broadcast' : 'Broadcast Offline'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  // Fonction pour rendre les autres modals
+  const renderOtherModals = () => (
+    <>
       {/* Modal pour les détails d'alarme */}
       <Modal
         visible={showAlarmDetailModal}
@@ -646,7 +965,7 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Modal pour le verset du jour */}
+      {/* Modal pour le verset */}
       <Modal
         visible={showVerseModal}
         animationType="fade"
@@ -654,7 +973,7 @@ export default function App() {
         onRequestClose={() => setShowVerseModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>📖 Verset du jour</Text>
+            <Text style={styles.modalTitle}>📖 Verset à méditer</Text>
             <Text style={styles.verseModalText}>"{dailyVerse.text}"</Text>
             <Text style={styles.verseModalRef}>— {dailyVerse.ref}</Text>
             
@@ -673,554 +992,105 @@ export default function App() {
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
-
-const RadioScreen = () => {
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-   const didUpdateTrack = useRef(false);
-
-  // Auto-play when the currentTrack changes
-    useEffect(() => {
-    if (didUpdateTrack.current) {
-      togglePlayback();
-    } else {
-      didUpdateTrack.current = true;
-    }
-  }, [currentTrack]);
-
-  return (
-    <View style={styles.radioContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-
-      {/* Header */}
-      <Animated.View style={[styles.radioHeader, { opacity: fadeAnim }]}>
-        <TouchableOpacity
-          onPress={() => {
-            hidePlayer();
-            setCurrentScreen('home');
-          }}
-          style={styles.backButton}>
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
-
-        <View style={styles.headerCenter}>
-          <Text style={styles.stationName}>Radio Bonne Nouvelle</Text>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, isConnected && styles.activeDot]} />
-            <Text style={styles.statusText}>
-              {isConnected ? 'EN DIRECT' : 'HORS LIGNE'}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          onPress={reloadPlayer}
-          style={styles.reloadButton}>
-          <Animated.View style={{ transform: [{ rotate: isLoading ? rotation : '0deg' }] }}>
-            <Text style={styles.reloadIcon}>⟳</Text>
-          </Animated.View>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Album Art */}
-      <Animated.View
-        style={[
-          styles.albumSection,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}>
-        <Animated.View
-          style={[
-            styles.radioWaveContainer,
-            {
-              transform: [
-                { scale: pulseAnim }
-              ]
-            }
-          ]}>
-          <View style={styles.radioTower}>
-            {/* Central Radio Antenna */}
-            <View style={styles.antenna}>
-              <View style={styles.antennaBase} />
-              <View style={styles.antennaRod} />
-              <View style={styles.antennaTop} />
-            </View>
-
-            {/* Animated Radio Waves */}
-            {isPlaying && [1, 2, 3, 4].map(i => (
-              <Animated.View
-                key={i}
-                style={[
-                  styles.radioWave,
-                  styles[`wave${i}`],
-                  {
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [1, 1.05],
-                      outputRange: [0.3, 0.8],
-                    }),
-                    transform: [{
-                      scale: pulseAnim.interpolate({
-                        inputRange: [1, 1.05],
-                        outputRange: [1, 1.2],
-                      })
-                    }]
-                  }
-                ]}
-              />
-            ))}
-
-            {/* Central Logo */}
-            <View style={styles.radioLogo}>
-              <Text style={styles.logoText}>RBN</Text>
-              <Text style={styles.logoSubtext}>📻</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle}>
-            {currentTrack || (isPlaying ? '🔴 EN DIRECT' : 'Radio Bonne Nouvelle')}
-          </Text>
-          <Text style={styles.trackSubtitle}>103.6 FM • Le canal de la Grandeur</Text>
-
-          {isPlaying && (
-            <Animated.View style={styles.waveform}>
-              {[1, 2, 3, 4, 5].map(i => (
-                <Animated.View
-                  key={i}
-                  style={[
-                    styles.waveBar,
-                    {
-                      transform: [{
-                        scaleY: pulseAnim.interpolate({
-                          inputRange: [1, 1.05],
-                          outputRange: [0.5, 1.5],
-                        })
-                      }]
-                    }
-                  ]}
-                />
-              ))}
-            </Animated.View>
-          )}
-        </View>
-      </Animated.View>
-
-      {/* Player Controls */}
-      <Animated.View
-        style={[
-          styles.controlsSection,
-          { opacity: fadeAnim }
-        ]}>
-
-        <View style={styles.mainControls}>
-          <TouchableOpacity style={styles.secondaryControl}>
-            <Text style={styles.controlIcon}>⏮</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.playButton,
-              isPlaying && styles.playingButton,
-              isLoading && styles.loadingButton
-            ]}
-            onPress={togglePlayback}
-            disabled={isLoading}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <Text style={styles.playIcon}>
-                {isLoading ? '⋯' : !showPlayer ? '▶' : isPlaying ? '⏸' : '▶'}
-              </Text>
-            </Animated.View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryControl}>
-            <Text style={styles.controlIcon}>⏭</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Animated Progress Bar */}
-        {(isPlaying || isLoading) && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressTrack}>
-              <Animated.View
-                style={[
-                  styles.progressFill,
-                  { width: isLoading ? '30%' : progressWidth }
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {isLoading ? 'Connexion...' : isPlaying ? 'Diffusion en cours' : 'Prêt'}
-            </Text>
-          </View>
-        )}
-      </Animated.View>
-
-      {/* WebView Player */}
-      {showPlayer && (
-        <Animated.View
-          style={[
-            styles.playerContainer,
-            {
-              transform: [{ translateY: slideAnim }],
-              opacity: fadeAnim
-            }
-          ]}>
-          <View style={styles.playerHeader}>
-            <Text style={styles.playerTitle}>🎵 Player Radio</Text>
-            <TouchableOpacity onPress={hidePlayer} style={styles.closePlayer}>
-              <Text style={styles.closeIcon}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <WebView
-            key={webViewKey}
-            source={{ uri: radioPlayerUrl }}
-            style={styles.webView}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            mediaPlaybackRequiresUserAction={false}
-            allowsInlineMediaPlayback={true}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={styles.loadingOverlay}>
-                <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                  <Text style={styles.loadingSpinner}>⟳</Text>
-                </Animated.View>
-                <Text style={styles.loadingText}>Chargement...</Text>
-              </View>
-            )}
-            onLoad={() => {
-              console.log('Player chargé!');
-              setIsLoading(false);
-              setIsConnected(true);
-
-              // Try to auto-click on play after loading
-              setTimeout(() => {
-                webViewRef.current?.injectJavaScript(`
-                  try {
-                    console.log('🎵 Recherche du bouton play RadioKing...');
-
-                    // Strategy 3: Auto-start audio elements
-                    if (!found) {
-                      const audioElements = document.querySelectorAll('audio');
-                      audioElements.forEach(audio => {
-                        if (audio.paused) {
-                          audio.play().then(() => {
-                            console.log('✅ Audio element démarré');
-                            found = true;
-                          }).catch(e => console.log('Audio play failed:', e));
-                        }
-                      });
-                    }
-
-                    // Retrieve the current title from the div you showed me
-                    const currentTitle = document.querySelector('#current-title span');
-                    const currentArtist = document.querySelector('#current-artist span');
-
-                    if (currentTitle) {
-                      const title = currentTitle.textContent;
-                      console.log('🎵 Titre en cours:', title);
-
-                      // Send the title to React Native
-                      window.ReactNativeWebView?.postMessage(JSON.stringify({
-                        type: 'currentTrack',
-                        title: title,
-                        artist: currentArtist?.textContent || ''
-                      }));
-                    }
-
-                    if (found) {
-                      console.log('🎵 Radio démarrée automatiquement!');
-                      window.ReactNativeWebView?.postMessage(JSON.stringify({
-                        type: 'playbackStarted'
-                      }));
-                    }
-
-                  } catch(e) {
-                    console.log('❌ Auto-play failed:', e);
-                  }
-                  true;
-                `);
-              }, 3000);
-
-              // Monitor title changes
-              setTimeout(() => {
-                webViewRef.current?.injectJavaScript(`
-                  // Observe title changes
-                  const titleElement = document.querySelector('#current-title span');
-                  if (titleElement) {
-                    const observer = new MutationObserver((mutations) => {
-                      mutations.forEach((mutation) => {
-                        if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                          const newTitle = titleElement.textContent;
-                          console.log('🎵 Nouveau titre:', newTitle);
-
-                          window.ReactNativeWebView?.postMessage(JSON.stringify({
-                            type: 'trackChanged',
-                            title: newTitle
-                          }));
-                        }
-                      });
-                    });
-
-                    observer.observe(titleElement, {
-                      childList: true,
-                      subtree: true,
-                      characterData: true
-                    });
-                  }
-                  true;
-                `);
-              }, 5000);
-            }}
-            onMessage={(event) => {
-              try {
-                const data = JSON.parse(event.nativeEvent.data);
-
-                if (data.type === 'currentTrack') {
-                  setCurrentTrack(data.title || '🔴 EN DIRECT');
-                  console.log('Titre reçu:', data.title);
-                }
-
-                if (data.type === 'playbackStarted') {
-                  setIsPlaying(true);
-                  setIsConnected(true);
-                  console.log('Playback démarré automatiquement!');
-                }
-
-                if (data.type === 'trackChanged') {
-                  setCurrentTrack(data.title || '🔴 EN DIRECT');
-                  console.log('Nouveau titre:', data.title);
-                }
-              } catch (e) {
-                console.log('Erreur parsing message:', e);
-              }
-            }}
-            onError={() => {
-              Alert.alert('Erreur', 'Impossible de charger le player');
-              setIsLoading(false);
-            }}
-            ref={webViewRef}
-          />
-        </Animated.View>
-      )}
-
-      {/* Bottom Controls */}
-      <Animated.View
-        style={[
-          styles.bottomControls,
-          { opacity: fadeAnim }
-        ]}>
-        {!showPlayer ? (
-          <TouchableOpacity
-            style={styles.showPlayerBtn}
-            onPress={showRadioPlayer}>
-            <Text style={styles.showPlayerText}>🎵 Ouvrir Player Radio</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.playerControls}>
-            <TouchableOpacity style={styles.playerControlBtn} onPress={hidePlayer}>
-              <Text style={styles.playerControlText}>🗙 Masquer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.playerControlBtn} onPress={reloadPlayer}>
-              <Text style={styles.playerControlText}>⟳ Recharger</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.playerControlBtn}
-              onPress={() => {
-                webViewRef.current?.injectJavaScript(`
-                  // Force click on play with all possible selectors
-                  const selectors = [
-                    'button[class*="play"]',
-                    '[class*="play-button"]',
-                    '[class*="btn-play"]',
-                    '.rk-play-btn',
-                    'button[title*="play"]',
-                    'button[title*="Play"]'
-                  ];
-
-                  let clicked = false;
-                  for (const selector of selectors) {
-                    const btn = document.querySelector(selector);
-                    if (btn && !clicked) {
-                      btn.click();
-                      console.log('✅ Bouton play forcé:', selector);
-                      clicked = true;
-
-                      // Update title after click
-                      setTimeout(() => {
-                        const title = document.querySelector('#current-title span')?.textContent;
-                        if (title) {
-                          window.ReactNativeWebView?.postMessage(JSON.stringify({
-                            type: 'currentTrack',
-                            title: title
-                          }));
-                        }
-                      }, 1000);
-                      break;
-                    }
-                  }
-
-                  if (!clicked) {
-                    // Last attempt with all buttons
-                    const allBtns = document.querySelectorAll('button, [role="button"]');
-                    allBtns.forEach(btn => {
-                      const text = btn.textContent || btn.innerHTML || '';
-                      if (text.includes('▶') || text.includes('play')) {
-                        btn.click();
-                        console.log('✅ Bouton play trouvé par contenu');
-                      }
-                    });
-                  }
-                  true;
-                `);
-              }}>
-              <Text style={styles.playerControlText}>▶ Force Play</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </Animated.View>
-
-      {/* Quality Indicator */}
-      <View style={styles.qualityIndicator}>
-        <Text style={styles.qualityText}>
-          {isConnected ? '🎵 HD Audio • 128 kbps' : '📻 Touchez ▶ pour écouter'}
-        </Text>
-      </View>
-    </View>
-  );
-};
-
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {currentScreen === 'home' ? <HomeScreen /> : 
-       currentScreen === 'alarms' ? <AlarmsScreen /> : 
-       <RadioScreen />}
+      {currentScreen === 'alarms' ? <AlarmsScreen /> : <RadioScreen />}
+      <MenuOverlay />
     </SafeAreaView>
   );
 }
 
-const LinearGradient = ({ colors, style, children }) => (
-  <View style={[style, { backgroundColor: colors[0] }]}>
-    {children}
-  </View>
-);
-
+// 🔥 STYLES AVEC TOUTES LES CORRECTIONS CLIENT
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#1a4a1a', // 🔥 CORRECTION 1: Fond vert sombre
   },
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1a4a1a', // 🔥 CORRECTION 1: Fond vert sombre
   },
-  headerGradient: {
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#ffffff',
-    opacity: 0.9,
-  },
-  menuContainer: {
+  
+  // 🔥 CORRECTION 9: Menu avec boutons gris clair
+  menuOverlay: {
     flex: 1,
-    paddingTop: 25,
-    paddingHorizontal: 20,
-  },
-  menuItemContainer: {
-    marginBottom: 15,
-  },
-  menuItem: {
-    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
+  },
+  menuModal: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
+    padding: 25,
+    width: width * 0.85,
+    maxHeight: height * 0.6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  primaryMenuItem: {
+  menuModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 25,
+  },
+  menuModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    backgroundColor: '#e8e8e8', // 🔥 CORRECTION 9: Gris clair
+    borderRadius: 15,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  activeMenuItem: {
     backgroundColor: '#2e7d32',
     shadowColor: '#2e7d32',
     shadowOpacity: 0.3,
   },
-  menuIcon: {
-    width: 55,
-    height: 55,
-    borderRadius: 27.5,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
+  menuModalIcon: {
+    fontSize: 24,
     marginRight: 15,
+    width: 30,
+    textAlign: 'center',
   },
-  primaryIcon: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  menuIconText: {
-    fontSize: 26,
-  },
-  menuTextContainer: {
+  menuModalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
     flex: 1,
   },
-  menuText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 3,
-  },
-  primaryText: {
+  activeIndicator: {
+    fontSize: 20,
     color: '#ffffff',
-  },
-  menuSubtext: {
-    fontSize: 14,
-    color: '#666',
-  },
-  primarySubtext: {
-    color: 'rgba(255,255,255,0.8)',
-  },
-  arrowContainer: {
-    width: 30,
-    alignItems: 'center',
-  },
-  arrow: {
-    fontSize: 18,
-    color: '#2e7d32',
     fontWeight: 'bold',
   },
-  primaryArrow: {
+  // 🔥 CORRECTION 10: Bouton Fermer gris sombre
+  menuModalClose: {
+    marginTop: 20,
+    paddingVertical: 15,
+    backgroundColor: '#666666', // 🔥 CORRECTION 10: Gris sombre
+    borderRadius: 15,
+    alignItems: 'center',
+  },
+  menuModalCloseText: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#ffffff',
   },
+  
   // Radio Screen Styles
-  radioContainer: {
-    flex: 1,
-    backgroundColor: '#1a1a1a',
-  },
   radioHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1237,8 +1107,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backIcon: {
-    fontSize: 28,
+  menuIcon: {
+    fontSize: 20,
     color: '#ffffff',
     fontWeight: 'bold',
   },
@@ -1252,9 +1122,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 5,
   },
+  headerSubtitle1: {
+    fontSize: 14,
+    color: '#ffffff',
+    opacity: 0.9,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: 'bold',
+    opacity: 0.9,
+  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 5,
   },
   statusDot: {
     width: 8,
@@ -1283,7 +1165,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#ffffff',
   },
-  // Bouton d'ajout pour les alarmes
   addButton: {
     width: 45,
     height: 45,
@@ -1297,6 +1178,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
   },
+  
   albumSection: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -1340,28 +1222,28 @@ const styles = StyleSheet.create({
   radioWave: {
     position: 'absolute',
     borderWidth: 3,
-    borderColor: '#4caf50',
     borderRadius: 9999,
   },
+  // 🔥 CORRECTION 2: Ondes du gris (intérieur) au blanc (extérieur)
   wave1: {
     width: 120,
     height: 120,
-    borderColor: '#4caf50',
+    borderColor: '#888888', // Gris foncé (intérieur)
   },
   wave2: {
     width: 160,
     height: 160,
-    borderColor: '#66bb6a',
+    borderColor: '#aaaaaa', // Gris moyen
   },
   wave3: {
     width: 200,
     height: 200,
-    borderColor: '#81c784',
+    borderColor: '#cccccc', // Gris clair
   },
   wave4: {
     width: 240,
     height: 240,
-    borderColor: '#a5d6a7',
+    borderColor: '#ffffff', // Blanc (extérieur)
   },
   radioLogo: {
     position: 'absolute',
@@ -1399,12 +1281,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
-  trackSubtitle: {
-    fontSize: 16,
-    color: '#aaa',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
   waveform: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1419,49 +1295,6 @@ const styles = StyleSheet.create({
   controlsSection: {
     paddingHorizontal: 40,
     paddingVertical: 20,
-  },
-  mainControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 25,
-  },
-  secondaryControl: {
-    width: 55,
-    height: 55,
-    borderRadius: 27.5,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 25,
-  },
-  controlIcon: {
-    fontSize: 22,
-    color: '#ffffff',
-  },
-  playButton: {
-    width: 85,
-    height: 85,
-    borderRadius: 42.5,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  playingButton: {
-    backgroundColor: '#4caf50',
-  },
-  loadingButton: {
-    backgroundColor: '#666',
-  },
-  playIcon: {
-    fontSize: 36,
-    color: '#1a1a1a',
-    fontWeight: 'bold',
   },
   progressContainer: {
     alignItems: 'center',
@@ -1478,17 +1311,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#4caf50',
     borderRadius: 2,
   },
-  progressText: {
-    fontSize: 12,
-    color: '#aaa',
-    fontWeight: '600',
-  },
+  
   playerContainer: {
     position: 'absolute',
-    bottom: 120,
+    top: 260,
     left: 15,
     right: 15,
-    height: height * 0.4,
+    height: height * 0.25,
     backgroundColor: '#ffffff',
     borderRadius: 20,
     shadowColor: '#000',
@@ -1573,39 +1402,28 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   playerControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  playerControlBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    minWidth: 80,
     alignItems: 'center',
   },
-  playerControlText: {
+  // 🔥 CORRECTION 3: Boutons colorés selon statut
+  statusButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  statusButtonOnline: {
+    backgroundColor: '#4caf50', // Vert pour online
+  },
+  statusButtonOffline: {
+    backgroundColor: '#f44336', // Rouge pour offline
+  },
+  statusButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#ffffff',
   },
-  qualityIndicator: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  qualityText: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '600',
-  },
-  // Alarmes Spirituelles Styles
+  
+  // Alarmes Styles
   alarmsScrollView: {
     flex: 1,
     paddingHorizontal: 20,
@@ -1666,14 +1484,14 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center', // 🔥 CORRECTION 8: Centrer le bouton unique
   },
   quickActionBtn: {
     alignItems: 'center',
     padding: 15,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
-    minWidth: 80,
+    minWidth: 120, // Plus large pour un seul bouton
   },
   quickActionIcon: {
     fontSize: 24,
@@ -1757,6 +1575,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
   },
+  
   // Modal Styles
   modalOverlay: {
     flex: 1,
@@ -1778,188 +1597,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  typeOption: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  selectedType: {
-    backgroundColor: '#4caf50',
-  },
-  typeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  selectedTypeText: {
-    color: '#ffffff',
-  },
-  // Sélecteur d'heure
-  timePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    backgroundColor: '#f9f9f9',
-  },
-  timePickerText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  timePickerIcon: {
-    fontSize: 20,
-  },
-  timePickerModal: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 25,
-    width: width * 0.85,
-    maxHeight: height * 0.6,
-  },
-  timePickerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  timePickerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 25,
-  },
-  timeColumn: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  timeColumnTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 10,
-  },
-  timeScroll: {
-    maxHeight: 200,
-    width: '100%',
-  },
-  timeOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    marginVertical: 2,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  selectedTimeOption: {
-    backgroundColor: '#4caf50',
-  },
-  timeOptionText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  selectedTimeText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  timeSeparator: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginHorizontal: 20,
-  },
-  timePickerButtons: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  timePickerCancel: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  timePickerCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  timePickerConfirm: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: '#4caf50',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  timePickerConfirmText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 15,
-    marginTop: 10,
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  saveBtn: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: '#4caf50',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  saveText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  // Détails d'alarme
   alarmDetailTime: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -1993,11 +1630,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     textAlign: 'center',
   },
-  meditationDetailText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
-  },
   closeModalBtn: {
     paddingVertical: 15,
     paddingHorizontal: 30,
@@ -2011,7 +1643,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
   },
-  // Modal verset du jour
   verseModalText: {
     fontSize: 18,
     fontStyle: 'italic',
