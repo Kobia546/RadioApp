@@ -14,6 +14,7 @@ import {
   TextInput,
   Switch,
   Vibration,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import React, { useCallback } from 'react';
@@ -42,6 +43,152 @@ const PRAYERS = [
   { title: "Prière de gratitude", text: "Seigneur, je Te loue pour tous Tes bienfaits. Tu es bon et Ta miséricorde dure à toujours. Merci pour Ton amour infini. Amen." },
 ];
 
+// 🎯 NOUVEAU: Composant pour créer des alarmes (résout le problème du clavier)
+const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
+  const [alarmTitle, setAlarmTitle] = useState('');
+  const [alarmTime, setAlarmTime] = useState('07:00');
+  const [alarmType, setAlarmType] = useState('prayer');
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const resetForm = () => {
+    setAlarmTitle('');
+    setAlarmTime('07:00');
+    setAlarmType('prayer');
+    setShowTimePicker(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const handleTimeChange = (event, time) => {
+    setShowTimePicker(false);
+    if (event.type === 'set' && time) {
+      const hours = time.getHours().toString().padStart(2, '0');
+      const minutes = time.getMinutes().toString().padStart(2, '0');
+      setAlarmTime(`${hours}:${minutes}`);
+      setSelectedDate(time);
+    }
+  };
+
+  const handleAddAlarm = () => {
+    if (!alarmTitle.trim()) {
+      Alert.alert('❌ Erreur', 'Veuillez entrer un titre pour l\'alarme');
+      return;
+    }
+
+    const newAlarm = {
+      id: Date.now(),
+      title: alarmTitle.trim(),
+      time: alarmTime,
+      type: alarmType,
+      enabled: true,
+      content: alarmType === 'prayer' ? 
+        PRAYERS[Math.floor(Math.random() * PRAYERS.length)] :
+        BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)]
+    };
+
+    onAddAlarm(newAlarm);
+    Alert.alert('✅ Succès', `Alarme "${alarmTitle}" créée à ${alarmTime}`);
+    handleClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={handleClose}>
+      <SafeAreaView style={styles.addAlarmContainer}>
+        <View style={styles.addAlarmHeader}>
+          <TouchableOpacity onPress={handleClose} style={styles.cancelButton}>
+            <Text style={styles.cancelButtonText}>Annuler</Text>
+          </TouchableOpacity>
+          <Text style={styles.addAlarmTitle}>➕ Nouvelle Alarme</Text>
+          <TouchableOpacity onPress={handleAddAlarm} style={styles.saveButton}>
+            <Text style={styles.saveButtonText}>Sauver</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.addAlarmContent}>
+          {/* Titre de l'alarme */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>📝 Titre de l'alarme</Text>
+            <TextInput
+              style={styles.formInput}
+              placeholder="Ex: Prière du matin"
+              value={alarmTitle}
+              onChangeText={setAlarmTitle}
+              autoFocus={true}
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* Heure */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>⏰ Heure</Text>
+            <TouchableOpacity 
+              style={styles.timeButton}
+              onPress={() => setShowTimePicker(true)}>
+              <Text style={styles.timeButtonText}>{alarmTime}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Type d'alarme */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>🔔 Type d'alarme</Text>
+            <View style={styles.typeSelector}>
+              <TouchableOpacity
+                style={[styles.typeOption, alarmType === 'prayer' && styles.selectedType]}
+                onPress={() => setAlarmType('prayer')}>
+                <Text style={[styles.typeText, alarmType === 'prayer' && styles.selectedTypeText]}>
+                  🙏 Prière
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeOption, alarmType === 'verse' && styles.selectedType]}
+                onPress={() => setAlarmType('verse')}>
+                <Text style={[styles.typeText, alarmType === 'verse' && styles.selectedTypeText]}>
+                  📖 Verset
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Aperçu du contenu */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>👁️ Aperçu du contenu</Text>
+            <View style={styles.previewContainer}>
+              {alarmType === 'prayer' ? (
+                <Text style={styles.previewText}>
+                  {PRAYERS[0].text}
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.previewText}>"{BIBLICAL_VERSES[0].text}"</Text>
+                  <Text style={styles.previewRef}>— {BIBLICAL_VERSES[0].ref}</Text>
+                </>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Time Picker */}
+        {showTimePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="time"
+            is24Hour={true}
+            display="default"
+            onChange={handleTimeChange}
+          />
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+};
 export default function App() {
   // États principaux
   const [currentScreen, setCurrentScreen] = useState('radio');
@@ -52,8 +199,6 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [currentTrack, setCurrentTrack] = useState('Radio Bonne Nouvelle');
   const [showMenu, setShowMenu] = useState(false);
-  const [showSimpleAlarmModal, setShowSimpleAlarmModal] = useState(false);
-const [alarmTitle, setAlarmTitle] = useState('');
 
   // États pour les alarmes spirituelles
   const [alarms, setAlarms] = useState([
@@ -63,15 +208,17 @@ const [alarmTitle, setAlarmTitle] = useState('');
   ]);
   
   const [selectedAlarm, setSelectedAlarm] = useState(null);
-  const [newAlarm, setNewAlarm] = useState({ title: '', time: '07:00', type: 'prayer', content: '' });
   const [dailyVerse, setDailyVerse] = useState(BIBLICAL_VERSES[0]);
   const [showVerseModal, setShowVerseModal] = useState(false);
   const [showAlarmDetailModal, setShowAlarmDetailModal] = useState(false);
-  
-  // DateTimePicker States
-  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false); // 🎯 NOUVEAU
 
+  // 🎯 NOUVEAU: États pour les dons
+  const [showDonationModal, setShowDonationModal] = useState(false);
+  const [donationAmount, setDonationAmount] = useState('');
+  const [donorName, setDonorName] = useState('');
+  const [donorEmail, setDonorEmail] = useState('');
+  
   // Références pour les animations
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(300)).current;
@@ -111,171 +258,95 @@ const [alarmTitle, setAlarmTitle] = useState('');
         }
       });
     };
-    const showAddAlarmPrompt = () => {
-  setAlarmTitle('');
-  setShowSimpleAlarmModal(true);
-};
-
-// 3. FONCTION POUR CONTINUER APRÈS LE TITRE :
-const continueWithAlarmCreation = () => {
-  if (alarmTitle.trim()) {
-    setShowSimpleAlarmModal(false);
-    showTimePickerForNewAlarm(alarmTitle.trim());
-  } else {
-    Alert.alert('❌ Erreur', 'Veuillez entrer un titre');
-  }
-};
 
     const interval = setInterval(checkAlarms, 60000);
     return () => clearInterval(interval);
   }, [alarms]);
 
-  // 🔥 NOUVELLE SOLUTION SIMPLE POUR AJOUTER ALARMES
-  const showAddAlarmPrompt = () => {
-    Alert.prompt(
-      '➕ Nouvelle Alarme',
-      'Entrez le titre de votre alarme spirituelle :',
-      [
-        {
-          text: 'Annuler',
-          style: 'cancel',
-        },
-        {
-          text: 'Continuer',
-          onPress: (title) => {
-            if (title && title.trim()) {
-              showTimePickerForNewAlarm(title.trim());
-            } else {
-              Alert.alert('❌ Erreur', 'Veuillez entrer un titre');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      '',
-      'default'
-    );
+  // 🎯 NOUVEAU: Fonction pour ajouter une alarme via le modal propre
+  const showAddAlarmModal_func = () => {
+    setShowAddAlarmModal(true);
   };
 
-  const showTimePickerForNewAlarm = (title) => {
-    const tempDate = new Date();
-    tempDate.setHours(7, 0, 0, 0);
-    setSelectedDate(tempDate);
-    setNewAlarm(prev => ({...prev, title: title}));
-    setShowDateTimePicker(true);
+  const handleAddAlarm = (newAlarm) => {
+    setAlarms([...alarms, newAlarm]);
   };
 
-  const onDateTimeChange = (event, selectedDate) => {
-    const currentDate = selectedDate || new Date();
-    setShowDateTimePicker(false);
-    setSelectedDate(currentDate);
-    
-    if (event.type === 'set') {
-      const hours = currentDate.getHours().toString().padStart(2, '0');
-      const minutes = currentDate.getMinutes().toString().padStart(2, '0');
-      const timeString = `${hours}:${minutes}`;
-      showTypeSelector(newAlarm.title, timeString);
-    }
-  };
-
-  const showTypeSelector = (title, time) => {
+  // 🎯 NOUVEAU: Fonction pour tester/jouer une alarme manuellement
+  const testAlarm = (alarm) => {
     Alert.alert(
-      '🔔 Type d\'alarme',
-      'Choisissez le type d\'alarme :',
+      '🔔 Test de l\'alarme',
+      'Voulez-vous tester cette alarme?',
       [
-        {
-          text: 'Annuler',
-          style: 'cancel',
-        },
-        {
-          text: '🙏 Prière',
-          onPress: () => createAlarmFinal(title, time, 'prayer'),
-        },
-        {
-          text: '📖 Verset',
-          onPress: () => createAlarmFinal(title, time, 'verse'),
-        },
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Tester', onPress: () => triggerAlarm(alarm) }
       ]
     );
   };
 
-  const createAlarmFinal = (title, time, type) => {
-    const alarm = {
-      id: Date.now(),
-      title: title,
-      time: time,
-      type: type,
-      enabled: true,
-      content: type === 'prayer' ? 
-        PRAYERS[Math.floor(Math.random() * PRAYERS.length)] :
-        BIBLICAL_VERSES[Math.floor(Math.random() * BIBLICAL_VERSES.length)]
-    };
-    
-    setAlarms([...alarms, alarm]);
-    setNewAlarm({ title: '', time: '07:00', type: 'prayer', content: '' });
-    
-    Alert.alert('✅ Alarme créée !', `Votre alarme "${title}" à ${time} a été ajoutée avec succès !`);
-  };
+  const triggerAlarm = (alarm) => {
+  // Pattern qui se répète automatiquement (jusqu'à 30 secondes max sur iOS)
+  const vibrationPattern = [500, 1000, 500, 1000]; // Se répète automatiquement
+  Vibration.vibrate(vibrationPattern, true); // Le "true" = répéter infiniment
 
-  const triggerAlarm = async (alarm) => {
-    try {
-      console.log('🔔 Déclenchement alarme:', alarm.title);
-      Vibration.vibrate([0, 1000, 500, 1000, 500, 1000]);
-      
-      Alert.alert(
-        `🔔 ${alarm.title}`,
-        alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
-        alarm.content.text,
-        [
-          { 
-            text: 'Amen 🙏', 
-            style: 'default', 
-            onPress: () => {
-              Vibration.cancel();
-              console.log('✅ Alarme arrêtée - Amen');
-            }
-          },
-          { 
-            text: 'Rappeler dans 5 min', 
-            onPress: () => {
-              Vibration.cancel();
-              scheduleSnooze(alarm);
-              console.log('⏰ Alarme reportée 5 min');
-            }
-          },
-        ],
-        { 
-          cancelable: false,
-          onDismiss: () => {
-            Vibration.cancel();
-          }
+  Alert.alert(
+    `🔔 ${alarm.title}`,
+    alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : alarm.content.text,
+    [
+      {
+        text: 'Amen 🙏',
+        style: 'default',
+        onPress: () => {
+          Vibration.cancel(); // Arrête la vibration
         }
-      );
-
-    } catch (error) {
-      console.log('Erreur alarme:', error);
-      Vibration.vibrate([0, 1000, 500, 1000]);
-      Alert.alert(
-        `🔔 ${alarm.title}`,
-        alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : 
-        alarm.content.text,
-        [
-          { 
-            text: 'Amen 🙏', 
-            onPress: () => {
-              Vibration.cancel();
-            }
-          }
-        ]
-      );
+      },
+      {
+        text: 'Rappeler dans 5 min',
+        onPress: () => {
+          Vibration.cancel(); // Arrête la vibration
+          scheduleSnooze(alarm);
+        }
+      },
+    ],
+    {
+      cancelable: false,
+      onDismiss: () => {
+        Vibration.cancel(); // Arrête la vibration si fermé autrement
+      }
     }
-  };
-
+  );
+};
+  // Fonction pour programmer un rappel
   const scheduleSnooze = (alarm) => {
     setTimeout(() => {
-      Vibration.vibrate([0, 1000, 500, 1000]);
+      Vibration.vibrate([500, 1000, 500, 1000], true);
       Alert.alert(`🔔 Rappel: ${alarm.title}`, "Il est temps de prier ou méditer 🙏");
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000); // 5 minutes
+  };
+
+  // 🎯 NOUVEAU: Fonctions pour les dons
+  const showDonationScreen = () => {
+    setCurrentScreen('donation');
+    setShowMenu(false);
+  };
+
+  const handleDonation = () => {
+    if (!donationAmount || !donorName) {
+      Alert.alert('❌ Erreur', 'Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    // Ici tu pourras ajouter ton API pour traiter les dons
+    Alert.alert(
+      '💝 Merci pour votre don !',
+      `Merci ${donorName} pour votre généreux don de ${donationAmount}€. Que Dieu vous bénisse !`,
+      [{ text: 'Amen 🙏', onPress: () => {
+        setDonationAmount('');
+        setDonorName('');
+        setDonorEmail('');
+        setShowDonationModal(false);
+      }}]
+    );
   };
 
   // Animations
@@ -325,7 +396,6 @@ const continueWithAlarmCreation = () => {
     }).start();
   };
 
-  // 🔥 CORRECTION 4: Bouton reload lance aussi la radio
   const showRadioPlayer = () => {
     setIsLoading(true);
     setShowPlayer(true);
@@ -359,13 +429,10 @@ const continueWithAlarmCreation = () => {
     });
   };
 
-  // 🔥 CORRECTION 4: reloadPlayer lance automatiquement la radio
   const reloadPlayer = () => {
     if (!showPlayer) {
-      // Si le player n'est pas ouvert, on l'ouvre
       showRadioPlayer();
     } else {
-      // Si le player est ouvert, on le recharge
       setIsLoading(true);
       setWebViewKey(prev => prev + 1);
       setTimeout(() => {
@@ -405,8 +472,7 @@ const continueWithAlarmCreation = () => {
     setDailyVerse(randomVerse);
     setShowVerseModal(true);
   };
-
-  // 🔥 CORRECTION 9: Boutons menu gris clair
+  // 🎯 NOUVEAU: Composant Menu avec section Dons
   const MenuOverlay = () => (
     <Modal
       visible={showMenu}
@@ -429,16 +495,6 @@ const continueWithAlarmCreation = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuModalItem}
-            onPress={() => {
-              Alert.alert('Facebook', 'Rejoignez notre communauté de foi!');
-              setShowMenu(false);
-            }}>
-            <Text style={styles.menuModalIcon}>📘</Text>
-            <Text style={styles.menuModalText}>Facebook</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.menuModalItem, currentScreen === 'alarms' && styles.activeMenuItem]}
             onPress={() => {
               setCurrentScreen('alarms');
@@ -449,7 +505,25 @@ const continueWithAlarmCreation = () => {
             {currentScreen === 'alarms' && <Text style={styles.activeIndicator}>●</Text>}
           </TouchableOpacity>
 
-          {/* 🔥 CORRECTION 10: Bouton Fermer gris sombre */}
+          {/* 🎯 NOUVEAU: Bouton Dons */}
+          <TouchableOpacity
+            style={[styles.menuModalItem, currentScreen === 'donation' && styles.activeMenuItem]}
+            onPress={showDonationScreen}>
+            <Text style={styles.menuModalIcon}>💝</Text>
+            <Text style={[styles.menuModalText, currentScreen === 'donation' && {color: '#ffffff'}]}>Faire un Don</Text>
+            {currentScreen === 'donation' && <Text style={styles.activeIndicator}>●</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuModalItem}
+            onPress={() => {
+              Alert.alert('Facebook', 'Rejoignez notre communauté de foi!');
+              setShowMenu(false);
+            }}>
+            <Text style={styles.menuModalIcon}>📘</Text>
+            <Text style={styles.menuModalText}>Facebook</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.menuModalClose}
             onPress={() => setShowMenu(false)}>
@@ -460,7 +534,128 @@ const continueWithAlarmCreation = () => {
     </Modal>
   );
 
-  // Composant Écran des Alarmes
+  // 🎯 NOUVEAU: Écran des Dons
+  const DonationScreen = () => (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+      
+      <View style={styles.radioHeader}>
+        <TouchableOpacity 
+          onPress={() => setShowMenu(true)}
+          style={styles.backButton}>
+          <Text style={styles.menuIcon}>☰</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <Text style={styles.stationName}>💝 Faire un Don</Text>
+          <Text style={styles.statusText}>Soutenez Radio Bonne Nouvelle</Text>
+        </View>
+        
+        <View style={{ width: 45 }} />
+      </View>
+
+      <ScrollView style={styles.donationScrollView} showsVerticalScrollIndicator={false}>
+        {/* Introduction */}
+        <View style={styles.donationIntroCard}>
+          <Text style={styles.donationIntroTitle}>💝 Votre soutien compte</Text>
+          <Text style={styles.donationIntroText}>
+            Radio Bonne Nouvelle existe grâce à votre générosité. Chaque don nous aide à continuer notre mission d'évangélisation et de bénédiction.
+          </Text>
+          <Text style={styles.donationVerse}>
+            "Donnez, et il vous sera donné : on versera dans votre sein une bonne mesure, serrée, secouée et qui déborde."
+          </Text>
+          <Text style={styles.donationVerseRef}>— Luc 6:38</Text>
+        </View>
+
+        {/* Montants suggérés */}
+        <View style={styles.donationAmountsCard}>
+          <Text style={styles.donationSectionTitle}>💰 Montants suggérés</Text>
+          <View style={styles.donationAmountsGrid}>
+            {['10', '25', '50', '100'].map(amount => (
+              <TouchableOpacity
+                key={amount}
+                style={[
+                  styles.donationAmountBtn,
+                  donationAmount === amount && styles.selectedDonationAmount
+                ]}
+                onPress={() => setDonationAmount(amount)}>
+                <Text style={[
+                  styles.donationAmountText,
+                  donationAmount === amount && styles.selectedDonationAmountText
+                ]}>{amount}€</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Formulaire de don */}
+        <View style={styles.donationFormCard}>
+          <Text style={styles.donationSectionTitle}>📝 Informations du don</Text>
+          
+          <View style={styles.donationFormGroup}>
+            <Text style={styles.donationFormLabel}>💰 Montant personnalisé (€) *</Text>
+            <TextInput
+              style={styles.donationFormInput}
+              placeholder="Ex: 75"
+              value={donationAmount}
+              onChangeText={setDonationAmount}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.donationFormGroup}>
+            <Text style={styles.donationFormLabel}>👤 Votre nom *</Text>
+            <TextInput
+              style={styles.donationFormInput}
+              placeholder="Ex: Jean Dupont"
+              value={donorName}
+              onChangeText={setDonorName}
+            />
+          </View>
+
+          <View style={styles.donationFormGroup}>
+            <Text style={styles.donationFormLabel}>📧 Email (optionnel)</Text>
+            <TextInput
+              style={styles.donationFormInput}
+              placeholder="Ex: jean@email.com"
+              value={donorEmail}
+              onChangeText={setDonorEmail}
+              keyboardType="email-address"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={styles.donateBtn}
+            onPress={handleDonation}>
+            <Text style={styles.donateBtnText}>💝 Faire le don</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.donationNote}>
+            📋 Note: L'intégration de paiement sera ajoutée prochainement. Merci pour votre patience et votre générosité !
+          </Text>
+        </View>
+
+        {/* Témoignages */}
+        <View style={styles.testimonialsCard}>
+          <Text style={styles.donationSectionTitle}>💬 Témoignages</Text>
+          <View style={styles.testimonial}>
+            <Text style={styles.testimonialText}>
+              "Grace à Radio Bonne Nouvelle, j'ai retrouvé l'espoir. Merci pour votre mission !"
+            </Text>
+            <Text style={styles.testimonialAuthor}>— Marie K.</Text>
+          </View>
+          <View style={styles.testimonial}>
+            <Text style={styles.testimonialText}>
+              "Cette radio a changé ma vie spirituelle. Je soutiens avec joie cette œuvre."
+            </Text>
+            <Text style={styles.testimonialAuthor}>— Paul D.</Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+
+  // Composant Écran des Alarmes (modifié pour ajouter le bouton test)
   const AlarmsScreen = () => (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
@@ -478,14 +673,13 @@ const continueWithAlarmCreation = () => {
         </View>
         
         <TouchableOpacity 
-          onPress={showAddAlarmPrompt}
+          onPress={showAddAlarmModal_func}
           style={styles.addButton}>
           <Text style={styles.addIcon}>+</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.alarmsScrollView} showsVerticalScrollIndicator={false}>
-        {/* 🔥 CORRECTION 6: "Verset à méditer" */}
         <View style={styles.verseCard}>
           <TouchableOpacity onPress={() => setShowVerseModal(true)}>
             <Text style={styles.verseTitle}>📖 Verset à méditer</Text>
@@ -497,7 +691,6 @@ const continueWithAlarmCreation = () => {
           </TouchableOpacity>
         </View>
 
-        {/* 🔥 CORRECTION 7: "Action d'aide à la Prière" et CORRECTION 8: Supprimer bouton Verset */}
         <View style={styles.quickActionsCard}>
           <Text style={styles.quickActionsTitle}>Action d'aide à la Prière</Text>
           <View style={styles.quickActionsRow}>
@@ -510,25 +703,32 @@ const continueWithAlarmCreation = () => {
           </View>
         </View>
 
-        {/* Liste des alarmes */}
+        {/* Liste des alarmes avec bouton Test */}
         <View style={styles.alarmsListCard}>
           <Text style={styles.alarmsListTitle}>Mes alarmes ({alarms.length})</Text>
           
           {alarms.map((alarm) => (
-            <TouchableOpacity
-              key={alarm.id}
-              style={[styles.alarmItem, !alarm.enabled && styles.disabledAlarm]}
-              onPress={() => showAlarmDetails(alarm)}>
-              
-              <View style={styles.alarmInfo}>
-                <Text style={styles.alarmTime}>{alarm.time}</Text>
-                <Text style={styles.alarmTitle}>{alarm.title}</Text>
-                <Text style={styles.alarmType}>
-                  {alarm.type === 'prayer' ? '🙏 Prière' : '📖 Verset'}
-                </Text>
-              </View>
+            <View key={alarm.id} style={[styles.alarmItem, !alarm.enabled && styles.disabledAlarm]}>
+              <TouchableOpacity 
+                style={styles.alarmMainInfo}
+                onPress={() => showAlarmDetails(alarm)}>
+                <View style={styles.alarmInfo}>
+                  <Text style={styles.alarmTime}>{alarm.time}</Text>
+                  <Text style={styles.alarmTitle}>{alarm.title}</Text>
+                  <Text style={styles.alarmType}>
+                    {alarm.type === 'prayer' ? '🙏 Prière' : '📖 Verset'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
               
               <View style={styles.alarmControls}>
+                {/* 🎯 NOUVEAU: Bouton Test */}
+                <TouchableOpacity
+                  onPress={() => testAlarm(alarm)}
+                  style={styles.testBtn}>
+                  <Text style={styles.testIcon}>▶️</Text>
+                </TouchableOpacity>
+                
                 <Switch
                   value={alarm.enabled}
                   onValueChange={() => toggleAlarm(alarm.id)}
@@ -541,14 +741,14 @@ const continueWithAlarmCreation = () => {
                   <Text style={styles.deleteIcon}>🗑️</Text>
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           ))}
           
           {alarms.length === 0 && (
             <View style={styles.noAlarmsContainer}>
               <Text style={styles.noAlarmsText}>Aucune alarme configurée</Text>
               <TouchableOpacity
-                onPress={showAddAlarmPrompt}
+                onPress={showAddAlarmModal_func}
                 style={styles.addFirstAlarmBtn}>
                 <Text style={styles.addFirstAlarmText}>➕ Créer ma première alarme</Text>
               </TouchableOpacity>
@@ -557,25 +757,18 @@ const continueWithAlarmCreation = () => {
         </View>
       </ScrollView>
 
-      {/* DateTimePicker */}
-      {showDateTimePicker && (
-        <DateTimePicker
-          testID="dateTimePicker"
-          value={selectedDate}
-          mode="time"
-          is24Hour={true}
-          display="default"
-          onChange={onDateTimeChange}
-        />
-      )}
+      {/* 🎯 NOUVEAU: Modal propre pour ajouter des alarmes */}
+      <AddAlarmModal
+        visible={showAddAlarmModal}
+        onClose={() => setShowAddAlarmModal(false)}
+        onAddAlarm={handleAddAlarm}
+      />
 
-      {/* Autres modals */}
       {renderOtherModals()}
     </View>
   );
-
-  // Composant Écran Radio
-  const RadioScreen = () => {
+  // Composant Écran Radio (identique au précédent)
+   const RadioScreen = () => {
     const rotation = rotateAnim.interpolate({
       inputRange: [0, 1],
       outputRange: ['0deg', '360deg'],
@@ -590,7 +783,6 @@ const continueWithAlarmCreation = () => {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
 
-        {/* Header */}
         <View style={styles.radioHeader}>
           <TouchableOpacity
             onPress={() => setShowMenu(true)}
@@ -619,7 +811,6 @@ const continueWithAlarmCreation = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Album Art */}
         <View style={styles.albumSection}>
           <Animated.View
             style={[
@@ -631,14 +822,12 @@ const continueWithAlarmCreation = () => {
               }
             ]}>
             <View style={styles.radioTower}>
-              {/* Central Radio Antenna */}
               <View style={styles.antenna}>
                 <View style={styles.antennaBase} />
                 <View style={styles.antennaRod} />
                 <View style={styles.antennaTop} />
               </View>
 
-              {/* 🔥 CORRECTION 2: Ondes gris → blanc */}
               {isPlaying && [1, 2, 3, 4].map(i => (
                 <Animated.View
                   key={i}
@@ -661,7 +850,6 @@ const continueWithAlarmCreation = () => {
                 />
               ))}
 
-              {/* Central Logo */}
               <View style={styles.radioLogo}>
                 <Text style={styles.logoText}>RBN</Text>
                 <Text style={styles.logoSubtext}>📻</Text>
@@ -670,7 +858,6 @@ const continueWithAlarmCreation = () => {
           </Animated.View>
 
           <View style={styles.trackInfo}>
-            {/* 🔥 CORRECTION 3: Live Broadcast vert / Broadcast Offline rouge */}
             <Text style={styles.trackTitle}>
               {isConnected ? '🔴 Live Broadcast' : '🔴 Broadcast Offline'}
             </Text>
@@ -698,7 +885,6 @@ const continueWithAlarmCreation = () => {
           </View>
         </View>
 
-        {/* Player Controls */}
         <View style={styles.controlsSection}>
           {(isPlaying || isLoading) && (
             <View style={styles.progressContainer}>
@@ -714,7 +900,7 @@ const continueWithAlarmCreation = () => {
           )}
         </View>
 
-        {/* WebView Player */}
+        {/* WebView Player avec même logique qu'avant */}
         {showPlayer && (
           <Animated.View
             style={[
@@ -730,174 +916,175 @@ const continueWithAlarmCreation = () => {
               </TouchableOpacity>
             </View>
 
-           <WebView
-  key={webViewKey}
-  source={{ uri: radioPlayerUrl }}
-  style={styles.webView}
-  javaScriptEnabled={true}
-  domStorageEnabled={true}
-  mediaPlaybackRequiresUserAction={false}
-  allowsInlineMediaPlayback={true}
-  startInLoadingState={true}
-  renderLoading={() => (
-    <View style={styles.loadingOverlay}>
-      <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-        <Text style={styles.loadingSpinner}>⟳</Text>
-      </Animated.View>
-      <Text style={styles.loadingText}>Chargement...</Text>
-    </View>
-  )}
-  onLoad={() => {
-    console.log('Player chargé!');
-    setIsLoading(false);
-    setIsConnected(true);
-    setIsPlaying(true);
+            <WebView
+              key={webViewKey}
+              source={{ uri: radioPlayerUrl }}
+              style={styles.webView}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mediaPlaybackRequiresUserAction={false}
+              allowsInlineMediaPlayback={true}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.loadingOverlay}>
+                  <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+                    <Text style={styles.loadingSpinner}>⟳</Text>
+                  </Animated.View>
+                  <Text style={styles.loadingText}>Chargement...</Text>
+                </View>
+              )}
+              onLoad={() => {
+                console.log('Player chargé!');
+                setIsLoading(false);
+                setIsConnected(true);
+                setIsPlaying(true);
 
-    setTimeout(() => {
-      webViewRef.current?.injectJavaScript(`
-        try {
-          console.log('🎵 Auto-play: Recherche du bouton play...');
-          let found = false;
+                // 🔥 RESTAURATION DE L'AUTO-PLAY AUTOMATIQUE
+                setTimeout(() => {
+                  webViewRef.current?.injectJavaScript(`
+                    try {
+                      console.log('🎵 Auto-play: Recherche du bouton play...');
+                      let found = false;
 
-          const selectors = [
-            'button.btn.p-0.radio-control-play-button.btn-xl[title="Play"]',
-            'button.radio-control-play-button[aria-label="Play"]',
-            'button[class*="radio-control-play-button"]',
-            '.radio-control-play-button',
-            'button.btn.p-0.radio-control-play-button',
-            'div.radio-controls button[title="Play"]',
-            'button[type="button"][title="Play"][aria-label="Play"]'
-          ];
+                      const selectors = [
+                        'button.btn.p-0.radio-control-play-button.btn-xl[title="Play"]',
+                        'button.radio-control-play-button[aria-label="Play"]',
+                        'button[class*="radio-control-play-button"]',
+                        '.radio-control-play-button',
+                        'button.btn.p-0.radio-control-play-button',
+                        'div.radio-controls button[title="Play"]',
+                        'button[type="button"][title="Play"][aria-label="Play"]'
+                      ];
 
-          for (const selector of selectors) {
-            const btn = document.querySelector(selector);
-            if (btn && !found) {
-              const event = new MouseEvent('click', {
-                view: window,
-                bubbles: true,
-                cancelable: true
-              });
-              btn.dispatchEvent(event);
-              console.log('✅ Auto-click réussi avec:', selector);
-              found = true;
-              break;
-            }
-          }
+                      for (const selector of selectors) {
+                        const btn = document.querySelector(selector);
+                        if (btn && !found) {
+                          const event = new MouseEvent('click', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true
+                          });
+                          btn.dispatchEvent(event);
+                          console.log('✅ Auto-click réussi avec:', selector);
+                          found = true;
+                          break;
+                        }
+                      }
 
-          if (!found) {
-            const allButtons = document.querySelectorAll('button, [role="button"]');
-            allButtons.forEach(btn => {
-              const classes = btn.className || '';
-              const title = btn.getAttribute('title') || '';
-              const ariaLabel = btn.getAttribute('aria-label') || '';
-              
-              if ((classes.includes('radio-control-play-button') || 
-                   title === 'Play' || ariaLabel === 'Play') && !found) {
-                
-                btn.click();
-                setTimeout(() => btn.click(), 100);
-                setTimeout(() => btn.click(), 200);
-                
-                console.log('✅ Auto-click par classe/attribut');
-                found = true;
-              }
-            });
-          }
+                      if (!found) {
+                        const allButtons = document.querySelectorAll('button, [role="button"]');
+                        allButtons.forEach(btn => {
+                          const classes = btn.className || '';
+                          const title = btn.getAttribute('title') || '';
+                          const ariaLabel = btn.getAttribute('aria-label') || '';
+                          
+                          if ((classes.includes('radio-control-play-button') || 
+                               title === 'Play' || ariaLabel === 'Play') && !found) {
+                            
+                            btn.click();
+                            setTimeout(() => btn.click(), 100);
+                            setTimeout(() => btn.click(), 200);
+                            
+                            console.log('✅ Auto-click par classe/attribut');
+                            found = true;
+                          }
+                        });
+                      }
 
-          if (found) {
-            setTimeout(() => {
-              const audioElements = document.querySelectorAll('audio, video');
-              audioElements.forEach(audio => {
-                if (audio.paused) {
-                  audio.play().catch(e => console.log('Audio autoplay blocked:', e));
+                      if (found) {
+                        setTimeout(() => {
+                          const audioElements = document.querySelectorAll('audio, video');
+                          audioElements.forEach(audio => {
+                            if (audio.paused) {
+                              audio.play().catch(e => console.log('Audio autoplay blocked:', e));
+                            }
+                          });
+                          
+                          const currentTitle = document.querySelector('.now-playing-title');
+                          const currentArtist = document.querySelector('.now-playing-artist');
+                          
+                          if (currentTitle) {
+                            const title = currentTitle.textContent || 'Live Broadcast';
+                            window.ReactNativeWebView?.postMessage(JSON.stringify({
+                              type: 'currentTrack',
+                              title: title,
+                              artist: currentArtist?.textContent || ''
+                            }));
+                          }
+                          
+                          window.ReactNativeWebView?.postMessage(JSON.stringify({
+                            type: 'playbackStarted'
+                          }));
+                        }, 1000);
+                      }
+
+                      if (!found) {
+                        console.log('❌ Bouton play non trouvé automatiquement');
+                      }
+
+                    } catch(e) {
+                      console.log('❌ Erreur auto-play:', e);
+                    }
+                    true;
+                  `);
+                }, 3000);
+
+                // Observer pour les changements de titre
+                setTimeout(() => {
+                  webViewRef.current?.injectJavaScript(`
+                    const titleObserver = () => {
+                      const titleElement = document.querySelector('.now-playing-title, h4.now-playing-title, .current-title');
+                      if (titleElement) {
+                        const observer = new MutationObserver(() => {
+                          const newTitle = titleElement.textContent || 'Live Broadcast';
+                          console.log('🎵 Titre changé:', newTitle);
+                          window.ReactNativeWebView?.postMessage(JSON.stringify({
+                            type: 'trackChanged',
+                            title: newTitle
+                          }));
+                        });
+
+                        observer.observe(titleElement, {
+                          childList: true,
+                          subtree: true,
+                          characterData: true
+                        });
+                      }
+                    };
+                    
+                    titleObserver();
+                    true;
+                  `);
+                }, 5000);
+              }}
+              onMessage={(event) => {
+                try {
+                  const data = JSON.parse(event.nativeEvent.data);
+
+                  if (data.type === 'currentTrack') {
+                    setCurrentTrack('🔴 Live Broadcast');
+                    console.log('Titre reçu:', data.title);
+                  }
+
+                  if (data.type === 'playbackStarted') {
+                    setIsPlaying(true);
+                    setIsConnected(true);
+                    console.log('Playback démarré automatiquement!');
+                  }
+
+                } catch (e) {
+                  console.log('Erreur parsing message:', e);
                 }
-              });
-              
-              const currentTitle = document.querySelector('.now-playing-title');
-              const currentArtist = document.querySelector('.now-playing-artist');
-              
-              if (currentTitle) {
-                const title = currentTitle.textContent || 'Live Broadcast';
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                  type: 'currentTrack',
-                  title: title,
-                  artist: currentArtist?.textContent || ''
-                }));
-              }
-              
-              window.ReactNativeWebView?.postMessage(JSON.stringify({
-                type: 'playbackStarted'
-              }));
-            }, 1000);
-          }
-
-          if (!found) {
-            console.log('❌ Bouton play non trouvé automatiquement');
-          }
-
-        } catch(e) {
-          console.log('❌ Erreur auto-play:', e);
-        }
-        true;
-      `);
-    }, 3000);
-
-    setTimeout(() => {
-      webViewRef.current?.injectJavaScript(`
-        const titleObserver = () => {
-          const titleElement = document.querySelector('.now-playing-title, h4.now-playing-title, .current-title');
-          if (titleElement) {
-            const observer = new MutationObserver(() => {
-              const newTitle = titleElement.textContent || 'Live Broadcast';
-              console.log('🎵 Titre changé:', newTitle);
-              window.ReactNativeWebView?.postMessage(JSON.stringify({
-                type: 'trackChanged',
-                title: newTitle
-              }));
-            });
-
-            observer.observe(titleElement, {
-              childList: true,
-              subtree: true,
-              characterData: true
-            });
-          }
-        };
-        
-        titleObserver();
-        true;
-      `);
-    }, 5000);
-  }}
-  onMessage={(event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-
-      if (data.type === 'currentTrack') {
-        setCurrentTrack('🔴 Live Broadcast');
-        console.log('Titre reçu:', data.title);
-      }
-
-      if (data.type === 'playbackStarted') {
-        setIsPlaying(true);
-        setIsConnected(true);
-        console.log('Playback démarré automatiquement!');
-      }
-
-    } catch (e) {
-      console.log('Erreur parsing message:', e);
-    }
-  }}
-  onError={() => {
-    Alert.alert('Erreur', 'Impossible de charger le player');
-    setIsLoading(false);
-  }}
-  ref={webViewRef}
-/>
+              }}
+              onError={() => {
+                Alert.alert('Erreur', 'Impossible de charger le player');
+                setIsLoading(false);
+              }}
+              ref={webViewRef}
+            />
           </Animated.View>
         )}
 
-        {/* Bottom Controls */}
         <View style={styles.bottomControls}>
           {!showPlayer ? (
             <TouchableOpacity
@@ -907,7 +1094,6 @@ const continueWithAlarmCreation = () => {
             </TouchableOpacity>
           ) : (
             <View style={styles.playerControls}>
-              {/* 🔥 CORRECTION 3: Bouton coloré selon l'état */}
               <TouchableOpacity
                 style={[
                   styles.statusButton,
@@ -928,7 +1114,6 @@ const continueWithAlarmCreation = () => {
   // Fonction pour rendre les autres modals
   const renderOtherModals = () => (
     <>
-      {/* Modal pour les détails d'alarme */}
       <Modal
         visible={showAlarmDetailModal}
         animationType="fade"
@@ -965,7 +1150,6 @@ const continueWithAlarmCreation = () => {
         </View>
       </Modal>
 
-      {/* Modal pour le verset */}
       <Modal
         visible={showVerseModal}
         animationType="fade"
@@ -995,26 +1179,38 @@ const continueWithAlarmCreation = () => {
     </>
   );
 
+  // Rendu principal avec navigation
+  const renderCurrentScreen = () => {
+    switch (currentScreen) {
+      case 'alarms':
+        return <AlarmsScreen />;
+      case 'donation':
+        return <DonationScreen />;
+      default:
+        return <RadioScreen />;
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {currentScreen === 'alarms' ? <AlarmsScreen /> : <RadioScreen />}
+      {renderCurrentScreen()}
       <MenuOverlay />
     </SafeAreaView>
   );
 }
 
-// 🔥 STYLES AVEC TOUTES LES CORRECTIONS CLIENT
+// 🎯 STYLES AVEC LES NOUVELLES SECTIONS
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1a4a1a', // 🔥 CORRECTION 1: Fond vert sombre
+    backgroundColor: '#1a4a1a',
   },
   container: {
     flex: 1,
-    backgroundColor: '#1a4a1a', // 🔥 CORRECTION 1: Fond vert sombre
+    backgroundColor: '#1a4a1a',
   },
   
-  // 🔥 CORRECTION 9: Menu avec boutons gris clair
+  // Menu Styles
   menuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -1045,7 +1241,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 18,
     paddingHorizontal: 20,
-    backgroundColor: '#e8e8e8', // 🔥 CORRECTION 9: Gris clair
+    backgroundColor: '#e8e8e8',
     borderRadius: 15,
     marginBottom: 12,
     shadowColor: '#000',
@@ -1076,11 +1272,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
   },
-  // 🔥 CORRECTION 10: Bouton Fermer gris sombre
   menuModalClose: {
     marginTop: 20,
     paddingVertical: 15,
-    backgroundColor: '#666666', // 🔥 CORRECTION 10: Gris sombre
+    backgroundColor: '#666666',
     borderRadius: 15,
     alignItems: 'center',
   },
@@ -1089,8 +1284,303 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
   },
-  
-  // Radio Screen Styles
+
+  // 🎯 NOUVEAUX STYLES POUR MODAL D'AJOUT D'ALARME
+  addAlarmContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  addAlarmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#2e7d32',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  addAlarmTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  cancelButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 15,
+  },
+  cancelButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  saveButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 15,
+  },
+  saveButtonText: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
+  },
+  addAlarmContent: {
+    flex: 1,
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 25,
+  },
+  formLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timeButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timeButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2e7d32',
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  typeOption: {
+    flex: 1,
+    paddingVertical: 15,
+    backgroundColor: '#e8e8e8',
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedType: {
+    backgroundColor: '#2e7d32',
+    borderColor: '#2e7d32',
+  },
+  typeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  selectedTypeText: {
+    color: '#ffffff',
+  },
+  previewContainer: {
+    backgroundColor: '#f9f9f9',
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  previewText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  previewRef: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 8,
+  },
+
+  // 🎯 NOUVEAUX STYLES POUR LES DONS
+  donationScrollView: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  donationIntroCard: {
+    backgroundColor: '#2e7d32',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  donationIntroTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  donationIntroText: {
+    fontSize: 16,
+    color: '#ffffff',
+    lineHeight: 24,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  donationVerse: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontStyle: 'italic',
+    lineHeight: 24,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  donationVerseRef: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  donationAmountsCard: {
+    backgroundColor: '#333',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  donationSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 15,
+  },
+  donationAmountsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  donationAmountBtn: {
+    flex: 1,
+    paddingVertical: 15,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedDonationAmount: {
+    backgroundColor: '#4caf50',
+    borderColor: '#4caf50',
+  },
+  donationAmountText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  selectedDonationAmountText: {
+    color: '#ffffff',
+  },
+  donationFormCard: {
+    backgroundColor: '#2a2a2a',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  donationFormGroup: {
+    marginBottom: 20,
+  },
+  donationFormLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 10,
+  },
+  donationFormInput: {
+    borderWidth: 1,
+    borderColor: '#555',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#444',
+    color: '#ffffff',
+  },
+  donateBtn: {
+    backgroundColor: '#4caf50',
+    paddingVertical: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 15,
+    shadowColor: '#4caf50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  donateBtnText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  donationNote: {
+    fontSize: 12,
+    color: '#aaa',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  testimonialsCard: {
+    backgroundColor: '#333',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 30,
+  },
+  testimonial: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  testimonialText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontStyle: 'italic',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  testimonialAuthor: {
+    fontSize: 12,
+    color: '#aaa',
+    textAlign: 'right',
+  },
+
+  // 🎯 STYLES POUR LE BOUTON TEST
+  testBtn: {
+    padding: 8,
+    marginRight: 10,
+  },
+  testIcon: {
+    fontSize: 16,
+  },
+  alarmMainInfo: {
+    flex: 1,
+  },
+
+  // Styles existants (radio, alarmes, etc.)
   radioHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1224,26 +1714,25 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderRadius: 9999,
   },
-  // 🔥 CORRECTION 2: Ondes du gris (intérieur) au blanc (extérieur)
   wave1: {
     width: 120,
     height: 120,
-    borderColor: '#888888', // Gris foncé (intérieur)
+    borderColor: '#888888',
   },
   wave2: {
     width: 160,
     height: 160,
-    borderColor: '#aaaaaa', // Gris moyen
+    borderColor: '#aaaaaa',
   },
   wave3: {
     width: 200,
     height: 200,
-    borderColor: '#cccccc', // Gris clair
+    borderColor: '#cccccc',
   },
   wave4: {
     width: 240,
     height: 240,
-    borderColor: '#ffffff', // Blanc (extérieur)
+    borderColor: '#ffffff',
   },
   radioLogo: {
     position: 'absolute',
@@ -1404,7 +1893,6 @@ const styles = StyleSheet.create({
   playerControls: {
     alignItems: 'center',
   },
-  // 🔥 CORRECTION 3: Boutons colorés selon statut
   statusButton: {
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -1412,10 +1900,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusButtonOnline: {
-    backgroundColor: '#4caf50', // Vert pour online
+    backgroundColor: '#4caf50',
   },
   statusButtonOffline: {
-    backgroundColor: '#f44336', // Rouge pour offline
+    backgroundColor: '#f44336',
   },
   statusButtonText: {
     fontSize: 14,
@@ -1484,14 +1972,14 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'center', // 🔥 CORRECTION 8: Centrer le bouton unique
+    justifyContent: 'center',
   },
   quickActionBtn: {
     alignItems: 'center',
     padding: 15,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
-    minWidth: 120, // Plus large pour un seul bouton
+    minWidth: 120,
   },
   quickActionIcon: {
     fontSize: 24,
