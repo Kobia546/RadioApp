@@ -298,7 +298,11 @@ const MoneyFusionModal = () => (
     startRotationAnimation();
     const today = new Date().getDay();
     setDailyVerse(BIBLICAL_VERSES[today % BIBLICAL_VERSES.length]);
-  }, []);
+  }, 
+  setTimeout(() => {
+    showRadioPlayer();
+  }, 1000),
+  []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -618,40 +622,10 @@ const MoneyFusionModal = () => (
 
     <ScrollView style={styles.donationScrollView} showsVerticalScrollIndicator={false}>
       {/* Introduction */}
-      <View style={styles.donationIntroCard}>
-        <Text style={styles.donationIntroTitle}>💝 Votre soutien compte</Text>
-        <Text style={styles.donationIntroText}>
-          Radio Bonne Nouvelle existe grâce à votre générosité. Chaque don nous aide à continuer notre mission d'évangélisation et de bénédiction.
-        </Text>
-        <Text style={styles.donationVerse}>
-          "Donnez, et il vous sera donné : on versera dans votre sein une bonne mesure, serrée, secouée et qui déborde."
-        </Text>
-        <Text style={styles.donationVerseRef}>— Luc 6:38</Text>
-      </View>
+     
 
       {/* 🎯 NOUVEAU: Sélecteur de méthode de paiement */}
-      <View style={styles.paymentMethodCard}>
-        <Text style={styles.donationSectionTitle}>🔒 Méthode de paiement</Text>
-        <View style={styles.paymentMethodSelector}>
-          <TouchableOpacity
-            style={[
-              styles.paymentMethodOption,
-              donationMethod === 'moneyfusion' && styles.selectedPaymentMethod
-            ]}
-            onPress={() => setDonationMethod('moneyfusion')}>
-            <Text style={styles.paymentMethodIcon}>💳</Text>
-            <Text style={[
-              styles.paymentMethodText,
-              donationMethod === 'moneyfusion' && styles.selectedPaymentMethodText
-            ]}>
-              Money Fusion
-            </Text>
-            <Text style={styles.paymentMethodSubtext}>Paiement sécurisé</Text>
-          </TouchableOpacity>
-          
-        
-        </View>
-      </View>
+     
 
       {/* 🎯 BOUTON PRINCIPAL POUR MONEY FUSION */}
       {donationMethod === 'moneyfusion' && (
@@ -678,34 +652,6 @@ const MoneyFusionModal = () => (
         </View>
       )}
 
-      {/* Formulaire local (seulement si sélectionné) */}
-      {donationMethod === 'local' && (
-        <>
-          {/* Montants suggérés */}
-          <View style={styles.donationAmountsCard}>
-            <Text style={styles.donationSectionTitle}>💰 Montants suggérés</Text>
-            <View style={styles.donationAmountsGrid}>
-              {['10', '25', '50', '100'].map(amount => (
-                <TouchableOpacity
-                  key={amount}
-                  style={[
-                    styles.donationAmountBtn,
-                    donationAmount === amount && styles.selectedDonationAmount
-                  ]}
-                  onPress={() => setDonationAmount(amount)}>
-                  <Text style={[
-                    styles.donationAmountText,
-                    donationAmount === amount && styles.selectedDonationAmountText
-                  ]}>{amount}€</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Formulaire de don local */}
-         
-        </>
-      )}
 
       {/* Témoignages */}
      
@@ -917,7 +863,7 @@ const MoneyFusionModal = () => (
 
           <View style={styles.trackInfo}>
             <Text style={styles.trackTitle}>
-              {isConnected ? '🔴 Live Broadcast' : '🔴 Broadcast Offline'}
+              {isConnected ? '🟢 Live Broadcast' : '🔴 Broadcast Offline'}
             </Text>
 
             {isPlaying && (
@@ -1152,16 +1098,7 @@ const MoneyFusionModal = () => (
             </TouchableOpacity>
           ) : (
             <View style={styles.playerControls}>
-              <TouchableOpacity
-                style={[
-                  styles.statusButton,
-                  isConnected ? styles.statusButtonOnline : styles.statusButtonOffline
-                ]}
-                onPress={() => Alert.alert('Statut', isConnected ? 'Radio en ligne' : 'Radio hors ligne')}>
-                <Text style={styles.statusButtonText}>
-                  {isConnected ? 'Live Broadcast' : 'Broadcast Offline'}
-                </Text>
-              </TouchableOpacity>
+              
             </View>
           )}
         </View>
