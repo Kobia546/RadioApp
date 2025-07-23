@@ -20,8 +20,11 @@ import { WebView } from 'react-native-webview';
 import React, { useCallback } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState, useRef, useEffect } from 'react';
+import { Image } from 'expo-image';
+
 
 const { width, height } = Dimensions.get('window');
+const Logo= require('./assets/images/Logo.jpeg')
 
 // Versets bibliques pour les alarmes
 const BIBLICAL_VERSES = [
@@ -215,14 +218,14 @@ const MoneyFusionModal = () => (
     <SafeAreaView style={styles.moneyFusionContainer}>
       <View style={styles.moneyFusionHeader}>
         <TouchableOpacity 
-          onPress={() => setShowMoneyFusionModal(false)} 
+          onPress={() => setShowMoneyFusionModal(false)}
           style={styles.cancelButton}>
           <Text style={styles.cancelButtonText}>← Retour</Text>
         </TouchableOpacity>
         <Text style={styles.moneyFusionTitle}>💳 Paiement Sécurisé</Text>
         <View style={{ width: 80 }} />
       </View>
-
+      
       <WebView
         source={{ uri: 'https://www.pay.moneyfusion.net/don-radio_1752694584869/' }}
         style={styles.moneyFusionWebView}
@@ -236,14 +239,13 @@ const MoneyFusionModal = () => (
           </View>
         )}
         onNavigationStateChange={(navState) => {
-          // Détecter si le paiement est terminé
           if (navState.url.includes('success') || navState.url.includes('merci')) {
             Alert.alert(
               '🎉 Merci pour votre don !',
               'Votre paiement a été traité avec succès. Que Dieu vous bénisse !',
-              [{ 
-                text: 'Amen 🙏', 
-                onPress: () => setShowMoneyFusionModal(false) 
+              [{
+                text: 'Amen 🙏',
+                onPress: () => setShowMoneyFusionModal(false)
               }]
             );
           }
@@ -294,16 +296,17 @@ const MoneyFusionModal = () => (
   // URL de ton player RadioKing 
   const radioPlayerUrl = 'https://a4.asurahosting.com/public/radio_bonne_nouvelle/embed?theme=light';
 
-  useEffect(() => {
-    startRotationAnimation();
-    const today = new Date().getDay();
-    setDailyVerse(BIBLICAL_VERSES[today % BIBLICAL_VERSES.length]);
-  }, 
+useEffect(() => {
+  startRotationAnimation();
+  const today = new Date().getDay();
+  setDailyVerse(BIBLICAL_VERSES[today % BIBLICAL_VERSES.length]);
+  
+  // 🎯 AJOUT : Lancer la radio automatiquement au démarrage
   setTimeout(() => {
     showRadioPlayer();
-  }, 1000),
-  []);
-
+  }, 1000); // Délai de 1 seconde
+  
+}, []); // ← Les crochets vides doivent rester ici
   useEffect(() => {
     if (isPlaying) {
       startPulseAnimation();
@@ -364,13 +367,13 @@ const MoneyFusionModal = () => (
         text: 'Amen 🙏',
         style: 'default',
         onPress: () => {
-          Vibration.cancel(); // Arrête la vibration
+          Vibration.cancel(); 
         }
       },
       {
         text: 'Rappeler dans 5 min',
         onPress: () => {
-          Vibration.cancel(); // Arrête la vibration
+          Vibration.cancel();
           scheduleSnooze(alarm);
         }
       },
@@ -612,50 +615,43 @@ const MoneyFusionModal = () => (
         <Text style={styles.menuIcon}>☰</Text>
       </TouchableOpacity>
       
-      <View style={styles.headerCenter}>
-        <Text style={styles.stationName}>💝 Faire un Don</Text>
-        <Text style={styles.statusText}>Soutenez Radio Bonne Nouvelle</Text>
+     <View style={styles.headerCenter}>
+        
+        <View style={styles.logoContainer}>
+          <Image source={Logo} style={styles.headerLogo} />
+        </View>
       </View>
       
       <View style={{ width: 45 }} />
     </View>
-
-    <ScrollView style={styles.donationScrollView} showsVerticalScrollIndicator={false}>
-      {/* Introduction */}
+    
+    <View style={styles.donationContainer}>
+      {/* Message d'introduction simplifié */}
      
 
-      {/* 🎯 NOUVEAU: Sélecteur de méthode de paiement */}
-     
-
-      {/* 🎯 BOUTON PRINCIPAL POUR MONEY FUSION */}
-      {donationMethod === 'moneyfusion' && (
-        <View style={styles.moneyFusionCard}>
-          <Text style={styles.donationSectionTitle}>💳 Paiement Sécurisé</Text>
-          <Text style={styles.moneyFusionDescription}>
-            Effectuez votre don en toute sécurité avec Money Fusion. Cartes bancaires et autres moyens de paiement acceptés.
-          </Text>
+      {/* Bouton principal de donation - centré et mis en valeur */}
+      <View style={styles.mainDonationCard}>
+        <Text style={styles.donationTitle}> Radio Bonne Nouvelle </Text>
+        
+        <TouchableOpacity
+          style={styles.mainDonationBtn}
+          onPress={openMoneyFusion}>
           
-          {/* Montants rapides pour Money Fusion */}
+          <Text style={styles.donationBtnText}>Je fais mon Don</Text>
+          <Text style={styles.donationBtnSubtext}>Paiement sécurisé</Text>
+        </TouchableOpacity>
+
+        {/* Informations de sécurité */}
        
-          <TouchableOpacity
-            style={styles.moneyFusionBtn}
-            onPress={openMoneyFusion}>
-            <Text style={styles.moneyFusionBtnText}>💳 Faire un don avec Money Fusion</Text>
-          </TouchableOpacity>
+      </View>
 
-          <View style={styles.securityInfo}>
-            <Text style={styles.securityIcon}>🔒</Text>
-            <Text style={styles.securityText}>
-              Paiement 100% sécurisé • SSL • Données cryptées
-            </Text>
-          </View>
-        </View>
-      )}
-
-
-      {/* Témoignages */}
-     
-    </ScrollView>
+      {/* Message de remerciement */}
+      <View style={styles.thankYouCard}>
+        <Text style={styles.thankYouText}>
+          ✨ Merci de faire partie de cette belle aventure avec nous !
+        </Text>
+      </View>
+    </View>
   </View>
 );
 
@@ -1089,19 +1085,7 @@ const MoneyFusionModal = () => (
           </Animated.View>
         )}
 
-        <View style={styles.bottomControls}>
-          {!showPlayer ? (
-            <TouchableOpacity
-              style={styles.showPlayerBtn}
-              onPress={showRadioPlayer}>
-              <Text style={styles.showPlayerText}>📻 Écouter la Radio</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.playerControls}>
-              
-            </View>
-          )}
-        </View>
+        
       </View>
     );
   };
@@ -1233,6 +1217,7 @@ const styles = StyleSheet.create({
   },
   moneyFusionTitle: {
     fontSize: 18,
+    marginLeft:30,
     fontWeight: 'bold',
     color: '#ffffff',
   },
@@ -1737,11 +1722,14 @@ const styles = StyleSheet.create({
   },
   menuIcon: {
     fontSize: 20,
+    bottom:50,
     color: '#ffffff',
     fontWeight: 'bold',
   },
   headerCenter: {
     flex: 1,
+    width:200,
+    height:200,
     alignItems: 'center',
   },
   stationName: {
@@ -2300,5 +2288,144 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#666',
+  },
+ 
+   // Nouveaux styles pour le header avec logo
+  logoContainer: {
+    marginTop: 100,
+     width: 300,
+    height: 300,
+    alignItems: 'center',
+  },
+
+  headerLogo: {
+    width: 150,
+    height: 150,
+    
+    borderRadius:20,
+
+   
+  },
+  
+  introCard: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  
+
+ 
+    donationContainer: {
+    flex: 1,
+    padding: 20,
+    marginBottom:40,
+    justifyContent: 'center',
+  },
+  
+  introCard: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  
+  introTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  
+  introText: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+
+  mainDonationCard: {
+    backgroundColor: '#1a4c96',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+
+  donationTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 25,
+    textAlign: 'center',
+  },
+
+  mainDonationBtn: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    paddingVertical: 20,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    minWidth: '100%',
+    marginBottom: 20,
+  },
+
+  donationBtnIcon: {
+    fontSize: 40,
+    marginBottom: 5,
+  },
+
+  donationBtnText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a4c96',
+    marginBottom: 5,
+  },
+
+  donationBtnSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
+
+  securityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+  },
+
+  securityIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+
+  securityText: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.9,
+  },
+
+  thankYouCard: {
+    backgroundColor: 'rgba(255,215,0,0.1)',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+  },
+
+  thankYouText: {
+    fontSize: 16,
+    color: '#FFD700',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
