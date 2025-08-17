@@ -14,14 +14,32 @@ import {
   TextInput,
   Switch,
   Vibration,
+  Linking,
   KeyboardAvoidingView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import React, { useCallback } from 'react';
+
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState, useRef, useEffect } from 'react';
+import { Image } from 'expo-image';
+import UltraStyledDonationScreen from './EnhancedDonationScreen';
+
 
 const { width, height } = Dimensions.get('window');
+const Logo = require('./assets/images/Logo.jpeg')
+
+// Configuration CinetPay - CORRIGÉE selon la documentation officielle
+const CINETPAY_CONFIG = {
+  // URL CORRECTE pour l'API CinetPay (POST avec JSON)
+  apiUrl: 'https://api-checkout.cinetpay.com/v2/payment',
+  apikey: '1627998221687ae5cd78f184.04992672', // Votre vraie clé
+  site_id: '105902489', // Votre vrai site_id
+  
+  // URLs de retour (optionnelles)
+  return_url: 'https://success.cinetpay.com/',
+  cancel_url: 'https://cancel.cinetpay.com/',
+  notify_url: 'https://notify.cinetpay.com/',
+};
 
 // Versets bibliques pour les alarmes
 const BIBLICAL_VERSES = [
@@ -43,7 +61,7 @@ const PRAYERS = [
   { title: "Prière de gratitude", text: "Seigneur, je Te loue pour tous Tes bienfaits. Tu es bon et Ta miséricorde dure à toujours. Merci pour Ton amour infini. Amen." },
 ];
 
-// 🎯 NOUVEAU: Composant pour créer des alarmes (résout le problème du clavier)
+// Composant pour créer des alarmes
 const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
   const [alarmTitle, setAlarmTitle] = useState('');
   const [alarmTime, setAlarmTime] = useState('07:00');
@@ -103,21 +121,20 @@ const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
       onRequestClose={handleClose}>
       <SafeAreaView style={styles.addAlarmContainer}>
         <View style={styles.addAlarmHeader}>
-          <TouchableOpacity onPress={handleClose} style={styles.cancelButton}>
-            <Text style={styles.cancelButtonText}>Annuler</Text>
+          <TouchableOpacity onPress={handleClose} style={styles.modernCancelButton}>
+            <Text style={styles.modernCancelButtonText}>Annuler</Text>
           </TouchableOpacity>
           <Text style={styles.addAlarmTitle}>➕ Nouvelle Alarme</Text>
-          <TouchableOpacity onPress={handleAddAlarm} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Sauver</Text>
+          <TouchableOpacity onPress={handleAddAlarm} style={styles.modernSaveButton}>
+            <Text style={styles.modernSaveButtonText}>Sauver</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.addAlarmContent}>
-          {/* Titre de l'alarme */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>📝 Titre de l'alarme</Text>
             <TextInput
-              style={styles.formInput}
+              style={styles.modernFormInput}
               placeholder="Ex: Prière du matin"
               value={alarmTitle}
               onChangeText={setAlarmTitle}
@@ -126,41 +143,38 @@ const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
             />
           </View>
 
-          {/* Heure */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>⏰ Heure</Text>
             <TouchableOpacity 
-              style={styles.timeButton}
+              style={styles.modernTimeButton}
               onPress={() => setShowTimePicker(true)}>
-              <Text style={styles.timeButtonText}>{alarmTime}</Text>
+              <Text style={styles.modernTimeButtonText}>{alarmTime}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Type d'alarme */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>🔔 Type d'alarme</Text>
-            <View style={styles.typeSelector}>
+            <View style={styles.modernTypeSelector}>
               <TouchableOpacity
-                style={[styles.typeOption, alarmType === 'prayer' && styles.selectedType]}
+                style={[styles.modernTypeOption, alarmType === 'prayer' && styles.modernSelectedType]}
                 onPress={() => setAlarmType('prayer')}>
-                <Text style={[styles.typeText, alarmType === 'prayer' && styles.selectedTypeText]}>
+                <Text style={[styles.modernTypeText, alarmType === 'prayer' && styles.modernSelectedTypeText]}>
                   🙏 Prière
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.typeOption, alarmType === 'verse' && styles.selectedType]}
+                style={[styles.modernTypeOption, alarmType === 'verse' && styles.modernSelectedType]}
                 onPress={() => setAlarmType('verse')}>
-                <Text style={[styles.typeText, alarmType === 'verse' && styles.selectedTypeText]}>
+                <Text style={[styles.modernTypeText, alarmType === 'verse' && styles.modernSelectedTypeText]}>
                   📖 Verset
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Aperçu du contenu */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>👁️ Aperçu du contenu</Text>
-            <View style={styles.previewContainer}>
+            <View style={styles.modernPreviewContainer}>
               {alarmType === 'prayer' ? (
                 <Text style={styles.previewText}>
                   {PRAYERS[0].text}
@@ -175,7 +189,6 @@ const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
           </View>
         </ScrollView>
 
-        {/* Time Picker */}
         {showTimePicker && (
           <DateTimePicker
             value={selectedDate}
@@ -189,6 +202,7 @@ const AddAlarmModal = ({ visible, onClose, onAddAlarm }) => {
     </Modal>
   );
 };
+
 export default function App() {
   // États principaux
   const [currentScreen, setCurrentScreen] = useState('radio');
@@ -199,6 +213,249 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [currentTrack, setCurrentTrack] = useState('Radio Bonne Nouvelle');
   const [showMenu, setShowMenu] = useState(false);
+  const [showCinetPayModal, setShowCinetPayModal] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState(null);
+  const [isGeneratingPayment, setIsGeneratingPayment] = useState(false);
+  const [donationMethod, setDonationMethod] = useState('local');
+
+
+  
+  const generateCinetPayUrl = async (amount = '1000', currency = 'XOF') => {
+    setIsGeneratingPayment(true);
+    
+    try {
+      const transactionId = 'RBN_' + Date.now();
+      
+      const paymentData = {
+        apikey: CINETPAY_CONFIG.apikey,
+        site_id: CINETPAY_CONFIG.site_id,
+        transaction_id: transactionId,
+        amount: parseInt(amount),
+        currency: currency,
+        description: `Don de ${parseInt(amount).toLocaleString()} FCFA pour Radio Bonne Nouvelle`,
+        return_url: CINETPAY_CONFIG.return_url,
+        notify_url: CINETPAY_CONFIG.notify_url,
+        channels: 'ALL', 
+        lang: 'fr',
+        
+       
+        customer_id: '1',
+        customer_name: donorName || 'Donateur',
+        customer_surname: 'Anonyme',
+        customer_email: donorEmail || 'contact@radiobonnenouvelle.com',
+        customer_phone_number: '+2250000000000', // Format requis
+        customer_address: 'Cocody Angré', // Adresse par défaut
+        customer_city: 'Abidjan',
+        customer_country: 'CI', // Code pays Côte d'Ivoire
+        customer_state: 'CI',
+        customer_zip_code: '00225'
+      };
+
+      console.log('🚀 Envoi des données à CinetPay (avec infos cartes):', paymentData);
+
+      // Appel POST à l'API CinetPay
+      const response = await fetch(CINETPAY_CONFIG.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(paymentData),
+      });
+
+      const result = await response.json();
+      console.log('📄 Réponse CinetPay:', result);
+
+      if (result.code === '201' && result.data && result.data.payment_url) {
+        // Succès - URL de paiement générée
+        console.log('✅ URL de paiement générée:', result.data.payment_url);
+        return result.data.payment_url;
+      } else {
+        // Erreur dans la réponse
+        console.error('❌ Erreur CinetPay:', result);
+        Alert.alert(
+          '❌ Erreur de paiement',
+          result.message || result.description || 'Impossible de générer le lien de paiement',
+          [{ text: 'OK' }]
+        );
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Erreur réseau CinetPay:', error);
+      Alert.alert(
+        '❌ Erreur de connexion',
+        'Impossible de contacter CinetPay. Vérifiez votre connexion internet.',
+        [{ text: 'OK' }]
+      );
+      return null;
+    } finally {
+      setIsGeneratingPayment(false);
+    }
+  };
+
+  const openCinetPay = async (amount) => {
+    // Vérifier que le montant est valide
+    if (!amount || isNaN(amount) || parseInt(amount) < 100) {
+      Alert.alert(
+        '❌ Montant invalide',
+        'Veuillez entrer un montant valide (minimum 100 FCFA)',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Générer l'URL de paiement avec le montant choisi
+    const url = await generateCinetPayUrl(amount.toString());
+    if (url) {
+      setPaymentUrl(url);
+      setShowCinetPayModal(true);
+    }
+  };
+
+  const openFacebookPage = async () => {
+    const facebookURL = 'https://web.facebook.com/profile.php?id=61577836107085';
+    
+    try {
+      const supported = await Linking.canOpenURL(facebookURL);
+      if (supported) {
+        await Linking.openURL(facebookURL);
+      } else {
+        Alert.alert('Erreur', 'Impossible d\'ouvrir Facebook');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'ouvrir le lien Facebook');
+    }
+    setShowMenu(false);
+  };
+
+  // Modal CinetPay corrigé selon la documentation officielle
+  const CinetPayModal = () => (
+    <Modal
+      visible={showCinetPayModal}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => {
+        setShowCinetPayModal(false);
+        setPaymentUrl(null); // Reset l'URL
+      }}>
+      <SafeAreaView style={styles.cinetPayContainer}>
+        <View style={styles.modernCinetPayHeader}>
+          <TouchableOpacity 
+            onPress={() => {
+              setShowCinetPayModal(false);
+              setPaymentUrl(null);
+            }}
+            style={styles.modernBackButton}>
+            <Text style={styles.modernBackButtonText}>← Retour</Text>
+          </TouchableOpacity>
+          <Text style={styles.modernCinetPayTitle}>Paiement Sécurisé</Text>
+          <View style={{ width: 80 }} />
+        </View>
+        
+        {isGeneratingPayment ? (
+          // Loading pendant la génération de l'URL
+          <View style={styles.modernLoadingOverlay}>
+            <Text style={styles.modernLoadingSpinner}>⏳</Text>
+            <Text style={styles.modernLoadingText}>Génération du lien de paiement...</Text>
+          </View>
+        ) : paymentUrl ? (
+          // WebView avec l'URL de paiement générée
+          <WebView
+            source={{ uri: paymentUrl }}
+            style={styles.cinetPayWebView}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.modernLoadingOverlay}>
+                <Text style={styles.modernLoadingSpinner}>💳</Text>
+                <Text style={styles.modernLoadingText}>Chargement CinetPay...</Text>
+              </View>
+            )}
+            onNavigationStateChange={(navState) => {
+              console.log('🌐 Navigation CinetPay:', navState.url);
+              
+              // Vérifier les URLs de succès CinetPay
+              if (navState.url.includes('success') || 
+                  navState.url.includes('payment_success') || 
+                  navState.url.includes('completed') ||
+                  navState.url.includes(CINETPAY_CONFIG.return_url)) {
+                
+                const donationText = donationAmount 
+                  ? `Votre don de ${parseInt(donationAmount).toLocaleString()} FCFA a été réçu par la Radio Bonne Nouvelle.Que Dieu vous benisse .`
+                  : 'Votre don a été traité avec succès via CinetPay.';
+                
+                Alert.alert(
+                  '🎉 Paiement Réussi !',
+                  `${donationText} Que Dieu vous bénisse !`,
+                  [{
+                    text: 'Amen 🙏',
+                    onPress: () => {
+                      setShowCinetPayModal(false);
+                      setPaymentUrl(null);
+                      // Réinitialiser le formulaire après succès
+                      setDonationAmount('');
+                      setDonorName('');
+                      setDonorEmail('');
+                    }
+                  }]
+                );
+              }
+              
+              // Vérifier les URLs d'annulation
+              if (navState.url.includes('cancel') || 
+                  navState.url.includes('cancelled')) {
+                
+                Alert.alert(
+                  'ℹ️ Paiement Annulé',
+                  'Votre paiement a été annulé. Vous pouvez réessayer quand vous voulez.',
+                  [{
+                    text: 'OK',
+                    onPress: () => {
+                      setShowCinetPayModal(false);
+                      setPaymentUrl(null);
+                    }
+                  }]
+                );
+              }
+            }}
+            onError={(error) => {
+              console.log('❌ Erreur WebView CinetPay:', error);
+              Alert.alert(
+                '❌ Erreur de chargement',
+                'Impossible de charger la page de paiement CinetPay.',
+                [
+                  { 
+                    text: 'Réessayer', 
+                    onPress: async () => {
+                      const newUrl = await generateCinetPayUrl();
+                      if (newUrl) {
+                        setPaymentUrl(newUrl);
+                      }
+                    }
+                  },
+                  { 
+                    text: 'Annuler', 
+                    style: 'cancel',
+                    onPress: () => {
+                      setShowCinetPayModal(false);
+                      setPaymentUrl(null);
+                    }
+                  }
+                ]
+              );
+            }}
+          />
+        ) : (
+          // Erreur - pas d'URL générée
+          <View style={styles.modernLoadingOverlay}>
+            <Text style={styles.modernLoadingSpinner}>❌</Text>
+            <Text style={styles.modernLoadingText}>Erreur de génération du paiement</Text>
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
 
   // États pour les alarmes spirituelles
   const [alarms, setAlarms] = useState([
@@ -211,9 +468,8 @@ export default function App() {
   const [dailyVerse, setDailyVerse] = useState(BIBLICAL_VERSES[0]);
   const [showVerseModal, setShowVerseModal] = useState(false);
   const [showAlarmDetailModal, setShowAlarmDetailModal] = useState(false);
-  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false); // 🎯 NOUVEAU
+  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false);
 
-  // 🎯 NOUVEAU: États pour les dons
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [donationAmount, setDonationAmount] = useState('');
   const [donorName, setDonorName] = useState('');
@@ -228,13 +484,17 @@ export default function App() {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const webViewRef = useRef(null);
 
-  // URL de ton player RadioKing 
   const radioPlayerUrl = 'https://a4.asurahosting.com/public/radio_bonne_nouvelle/embed?theme=light';
 
   useEffect(() => {
     startRotationAnimation();
     const today = new Date().getDay();
     setDailyVerse(BIBLICAL_VERSES[today % BIBLICAL_VERSES.length]);
+    
+    setTimeout(() => {
+      showRadioPlayer();
+    }, 1000);
+    
   }, []);
 
   useEffect(() => {
@@ -246,7 +506,6 @@ export default function App() {
     }
   }, [isPlaying]);
 
-  // Fonction pour vérifier les alarmes
   useEffect(() => {
     const checkAlarms = () => {
       const now = new Date();
@@ -263,7 +522,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [alarms]);
 
-  // 🎯 NOUVEAU: Fonction pour ajouter une alarme via le modal propre
   const showAddAlarmModal_func = () => {
     setShowAddAlarmModal(true);
   };
@@ -272,7 +530,6 @@ export default function App() {
     setAlarms([...alarms, newAlarm]);
   };
 
-  // 🎯 NOUVEAU: Fonction pour tester/jouer une alarme manuellement
   const testAlarm = (alarm) => {
     Alert.alert(
       '🔔 Test de l\'alarme',
@@ -285,46 +542,44 @@ export default function App() {
   };
 
   const triggerAlarm = (alarm) => {
-  // Pattern qui se répète automatiquement (jusqu'à 30 secondes max sur iOS)
-  const vibrationPattern = [500, 1000, 500, 1000]; // Se répète automatiquement
-  Vibration.vibrate(vibrationPattern, true); // Le "true" = répéter infiniment
+    const vibrationPattern = [500, 1000, 500, 1000];
+    Vibration.vibrate(vibrationPattern, true);
 
-  Alert.alert(
-    `🔔 ${alarm.title}`,
-    alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : alarm.content.text,
-    [
+    Alert.alert(
+      `🔔 ${alarm.title}`,
+      alarm.type === 'verse' ? `${alarm.content.text}\n\n— ${alarm.content.ref}` : alarm.content.text,
+      [
+        {
+          text: 'Amen 🙏',
+          style: 'default',
+          onPress: () => {
+            Vibration.cancel(); 
+          }
+        },
+        {
+          text: 'Rappeler dans 5 min',
+          onPress: () => {
+            Vibration.cancel();
+            scheduleSnooze(alarm);
+          }
+        },
+      ],
       {
-        text: 'Amen 🙏',
-        style: 'default',
-        onPress: () => {
-          Vibration.cancel(); // Arrête la vibration
+        cancelable: false,
+        onDismiss: () => {
+          Vibration.cancel();
         }
-      },
-      {
-        text: 'Rappeler dans 5 min',
-        onPress: () => {
-          Vibration.cancel(); // Arrête la vibration
-          scheduleSnooze(alarm);
-        }
-      },
-    ],
-    {
-      cancelable: false,
-      onDismiss: () => {
-        Vibration.cancel(); // Arrête la vibration si fermé autrement
       }
-    }
-  );
-};
-  // Fonction pour programmer un rappel
+    );
+  };
+
   const scheduleSnooze = (alarm) => {
     setTimeout(() => {
       Vibration.vibrate([500, 1000, 500, 1000], true);
       Alert.alert(`🔔 Rappel: ${alarm.title}`, "Il est temps de prier ou méditer 🙏");
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 5 * 60 * 1000);
   };
 
-  // 🎯 NOUVEAU: Fonctions pour les dons
   const showDonationScreen = () => {
     setCurrentScreen('donation');
     setShowMenu(false);
@@ -336,7 +591,6 @@ export default function App() {
       return;
     }
 
-    // Ici tu pourras ajouter ton API pour traiter les dons
     Alert.alert(
       '💝 Merci pour votre don !',
       `Merci ${donorName} pour votre généreux don de ${donationAmount}€. Que Dieu vous bénisse !`,
@@ -472,261 +726,145 @@ export default function App() {
     setDailyVerse(randomVerse);
     setShowVerseModal(true);
   };
-  // 🎯 NOUVEAU: Composant Menu avec section Dons
+
+  // Menu moderne
   const MenuOverlay = () => (
     <Modal
       visible={showMenu}
       animationType="fade"
       transparent={true}
       onRequestClose={() => setShowMenu(false)}>
-      <View style={styles.menuOverlay}>
-        <View style={styles.menuModal}>
-          <Text style={styles.menuModalTitle}>📻 Menu</Text>
+      <View style={styles.modernMenuOverlay}>
+        <View style={styles.modernMenuModal}>
+          <Text style={styles.modernMenuModalTitle}>📻 MENU</Text>
           
           <TouchableOpacity
-            style={[styles.menuModalItem, currentScreen === 'radio' && styles.activeMenuItem]}
+            style={[styles.modernMenuModalItem, currentScreen === 'radio' && styles.modernActiveMenuItem]}
             onPress={() => {
               setCurrentScreen('radio');
               setShowMenu(false);
             }}>
-            <Text style={styles.menuModalIcon}>📻</Text>
-            <Text style={[styles.menuModalText, currentScreen === 'radio' && {color: '#ffffff'}]}>Ma Radio</Text>
-            {currentScreen === 'radio' && <Text style={styles.activeIndicator}>●</Text>}
+            <Text style={styles.modernMenuModalIcon}>📻</Text>
+            <Text style={[styles.modernMenuModalText, currentScreen === 'radio' && {color: '#ffffff'}]}>Ma Radio</Text>
+            {currentScreen === 'radio' && <Text style={styles.modernActiveIndicator}>●</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuModalItem, currentScreen === 'alarms' && styles.activeMenuItem]}
+            style={[styles.modernMenuModalItem, currentScreen === 'alarms' && styles.modernActiveMenuItem]}
             onPress={() => {
               setCurrentScreen('alarms');
               setShowMenu(false);
             }}>
-            <Text style={styles.menuModalIcon}>🔔</Text>
-            <Text style={[styles.menuModalText, currentScreen === 'alarms' && {color: '#ffffff'}]}>Alarmes Spirituelles</Text>
-            {currentScreen === 'alarms' && <Text style={styles.activeIndicator}>●</Text>}
+            <Text style={styles.modernMenuModalIcon}>🔔</Text>
+            <Text style={[styles.modernMenuModalText, currentScreen === 'alarms' && {color: '#ffffff'}]}>Alarmes Spirituelles</Text>
+            {currentScreen === 'alarms' && <Text style={styles.modernActiveIndicator}>●</Text>}
           </TouchableOpacity>
 
-          {/* 🎯 NOUVEAU: Bouton Dons */}
           <TouchableOpacity
-            style={[styles.menuModalItem, currentScreen === 'donation' && styles.activeMenuItem]}
+            style={[styles.modernMenuModalItem, currentScreen === 'donation' && styles.modernActiveMenuItem]}
             onPress={showDonationScreen}>
-            <Text style={styles.menuModalIcon}>💝</Text>
-            <Text style={[styles.menuModalText, currentScreen === 'donation' && {color: '#ffffff'}]}>Faire un Don</Text>
-            {currentScreen === 'donation' && <Text style={styles.activeIndicator}>●</Text>}
+            <Text style={styles.modernMenuModalIcon}> 🎁</Text>
+            <Text style={[styles.modernMenuModalText, currentScreen === 'donation' && {color: '#ffffff'}]}>Faire un Don</Text>
+            {currentScreen === 'donation' && <Text style={styles.modernActiveIndicator}>●</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuModalItem}
-            onPress={() => {
-              Alert.alert('Facebook', 'Rejoignez notre communauté de foi!');
-              setShowMenu(false);
-            }}>
-            <Text style={styles.menuModalIcon}>📘</Text>
-            <Text style={styles.menuModalText}>Facebook</Text>
+            style={styles.modernMenuModalItem}
+            onPress={openFacebookPage}>
+            <Text style={styles.modernMenuModalIcon}>📘</Text>
+            <Text style={styles.modernMenuModalText}>Facebook</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuModalClose}
+            style={styles.modernMenuModalClose}
             onPress={() => setShowMenu(false)}>
-            <Text style={styles.menuModalCloseText}>Fermer</Text>
+            <Text style={styles.modernMenuModalCloseText}>Fermer</Text>
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 
-  // 🎯 NOUVEAU: Écran des Dons
   const DonationScreen = () => (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-      
-      <View style={styles.radioHeader}>
-        <TouchableOpacity 
-          onPress={() => setShowMenu(true)}
-          style={styles.backButton}>
-          <Text style={styles.menuIcon}>☰</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <Text style={styles.stationName}>💝 Faire un Don</Text>
-          <Text style={styles.statusText}>Soutenez Radio Bonne Nouvelle</Text>
-        </View>
-        
-        <View style={{ width: 45 }} />
-      </View>
+  <UltraStyledDonationScreen
+    showCinetPayModal={showCinetPayModal}
+    setShowCinetPayModal={setShowCinetPayModal}
+    openCinetPay={openCinetPay}
+    isGeneratingPayment={isGeneratingPayment}
+    Logo={Logo}
+    setShowMenu={setShowMenu}
+  />
+);
 
-      <ScrollView style={styles.donationScrollView} showsVerticalScrollIndicator={false}>
-        {/* Introduction */}
-        <View style={styles.donationIntroCard}>
-          <Text style={styles.donationIntroTitle}>💝 Votre soutien compte</Text>
-          <Text style={styles.donationIntroText}>
-            Radio Bonne Nouvelle existe grâce à votre générosité. Chaque don nous aide à continuer notre mission d'évangélisation et de bénédiction.
-          </Text>
-          <Text style={styles.donationVerse}>
-            "Donnez, et il vous sera donné : on versera dans votre sein une bonne mesure, serrée, secouée et qui déborde."
-          </Text>
-          <Text style={styles.donationVerseRef}>— Luc 6:38</Text>
-        </View>
-
-        {/* Montants suggérés */}
-        <View style={styles.donationAmountsCard}>
-          <Text style={styles.donationSectionTitle}>💰 Montants suggérés</Text>
-          <View style={styles.donationAmountsGrid}>
-            {['10', '25', '50', '100'].map(amount => (
-              <TouchableOpacity
-                key={amount}
-                style={[
-                  styles.donationAmountBtn,
-                  donationAmount === amount && styles.selectedDonationAmount
-                ]}
-                onPress={() => setDonationAmount(amount)}>
-                <Text style={[
-                  styles.donationAmountText,
-                  donationAmount === amount && styles.selectedDonationAmountText
-                ]}>{amount}€</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Formulaire de don */}
-        <View style={styles.donationFormCard}>
-          <Text style={styles.donationSectionTitle}>📝 Informations du don</Text>
-          
-          <View style={styles.donationFormGroup}>
-            <Text style={styles.donationFormLabel}>💰 Montant personnalisé (€) *</Text>
-            <TextInput
-              style={styles.donationFormInput}
-              placeholder="Ex: 75"
-              value={donationAmount}
-              onChangeText={setDonationAmount}
-              keyboardType="numeric"
-            />
-          </View>
-
-          <View style={styles.donationFormGroup}>
-            <Text style={styles.donationFormLabel}>👤 Votre nom *</Text>
-            <TextInput
-              style={styles.donationFormInput}
-              placeholder="Ex: Jean Dupont"
-              value={donorName}
-              onChangeText={setDonorName}
-            />
-          </View>
-
-          <View style={styles.donationFormGroup}>
-            <Text style={styles.donationFormLabel}>📧 Email (optionnel)</Text>
-            <TextInput
-              style={styles.donationFormInput}
-              placeholder="Ex: jean@email.com"
-              value={donorEmail}
-              onChangeText={setDonorEmail}
-              keyboardType="email-address"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.donateBtn}
-            onPress={handleDonation}>
-            <Text style={styles.donateBtnText}>💝 Faire le don</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.donationNote}>
-            📋 Note: L'intégration de paiement sera ajoutée prochainement. Merci pour votre patience et votre générosité !
-          </Text>
-        </View>
-
-        {/* Témoignages */}
-        <View style={styles.testimonialsCard}>
-          <Text style={styles.donationSectionTitle}>💬 Témoignages</Text>
-          <View style={styles.testimonial}>
-            <Text style={styles.testimonialText}>
-              "Grace à Radio Bonne Nouvelle, j'ai retrouvé l'espoir. Merci pour votre mission !"
-            </Text>
-            <Text style={styles.testimonialAuthor}>— Marie K.</Text>
-          </View>
-          <View style={styles.testimonial}>
-            <Text style={styles.testimonialText}>
-              "Cette radio a changé ma vie spirituelle. Je soutiens avec joie cette œuvre."
-            </Text>
-            <Text style={styles.testimonialAuthor}>— Paul D.</Text>
-          </View>
-        </View>
-      </ScrollView>
-    </View>
-  );
-
-  // Composant Écran des Alarmes (modifié pour ajouter le bouton test)
   const AlarmsScreen = () => (
-    <View style={styles.container}>
+    <View style={styles.modernContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
       
-      <View style={styles.radioHeader}>
+      <View style={styles.modernRadioHeader}>
         <TouchableOpacity 
           onPress={() => setShowMenu(true)}
-          style={styles.backButton}>
-          <Text style={styles.menuIcon}>☰</Text>
+          style={styles.modernHeaderButton}>
+          <Text style={styles.modernMenuIcon}>☰</Text>
         </TouchableOpacity>
         
-        <View style={styles.headerCenter}>
-          <Text style={styles.stationName}>Alarmes Spirituelles</Text>
-          <Text style={styles.statusText}>{alarms.filter(a => a.enabled).length} alarmes actives</Text>
+        <View style={styles.modernHeaderCenter}>
+          <Text style={styles.modernStationName}>Alarmes Spirituelles</Text>
+          <Text style={styles.modernStatusText}>{alarms.filter(a => a.enabled).length} alarmes actives</Text>
         </View>
         
         <TouchableOpacity 
           onPress={showAddAlarmModal_func}
-          style={styles.addButton}>
-          <Text style={styles.addIcon}>+</Text>
+          style={styles.modernAddButton}>
+          <Text style={styles.modernAddIcon}>+</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.alarmsScrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.verseCard}>
+      <ScrollView style={styles.modernAlarmsScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} bounces={true}>
+        <View style={styles.modernVerseCard}>
           <TouchableOpacity onPress={() => setShowVerseModal(true)}>
-            <Text style={styles.verseTitle}>📖 Verset à méditer</Text>
-            <Text style={styles.verseText}>"{dailyVerse.text}"</Text>
-            <Text style={styles.verseRef}>— {dailyVerse.ref}</Text>
+            <Text style={styles.modernVerseTitle}>📖 Verset à méditer</Text>
+            <Text style={styles.modernVerseText}>"{dailyVerse.text}"</Text>
+            <Text style={styles.modernVerseRef}>— {dailyVerse.ref}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={getRandomVerse} style={styles.refreshVerseBtn}>
-            <Text style={styles.refreshVerseText}>🔄 Nouveau verset</Text>
+          <TouchableOpacity onPress={getRandomVerse} style={styles.modernRefreshVerseBtn}>
+            <Text style={styles.modernRefreshVerseText}>🔄 Nouveau verset</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.quickActionsCard}>
-          <Text style={styles.quickActionsTitle}>Action d'aide à la Prière</Text>
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity style={styles.quickActionBtn} onPress={() => {
+        <View style={styles.modernQuickActionsCard}>
+          <Text style={styles.modernQuickActionsTitle}>Action d'aide à la Prière</Text>
+          <View style={styles.modernQuickActionsRow}>
+            <TouchableOpacity style={styles.modernQuickActionBtn} onPress={() => {
               Alert.alert('🙏 Prière', PRAYERS[Math.floor(Math.random() * PRAYERS.length)].text);
             }}>
-              <Text style={styles.quickActionIcon}>🙏</Text>
-              <Text style={styles.quickActionText}>Prière</Text>
+              <Text style={styles.modernQuickActionIcon}>🙏</Text>
+              <Text style={styles.modernQuickActionText}>Prière</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Liste des alarmes avec bouton Test */}
-        <View style={styles.alarmsListCard}>
-          <Text style={styles.alarmsListTitle}>Mes alarmes ({alarms.length})</Text>
+        <View style={styles.modernAlarmsListCard}>
+          <Text style={styles.modernAlarmsListTitle}>Mes alarmes ({alarms.length})</Text>
           
           {alarms.map((alarm) => (
-            <View key={alarm.id} style={[styles.alarmItem, !alarm.enabled && styles.disabledAlarm]}>
+            <View key={alarm.id} style={[styles.modernAlarmItem, !alarm.enabled && styles.modernDisabledAlarm]}>
               <TouchableOpacity 
-                style={styles.alarmMainInfo}
+                style={styles.modernAlarmMainInfo}
                 onPress={() => showAlarmDetails(alarm)}>
-                <View style={styles.alarmInfo}>
-                  <Text style={styles.alarmTime}>{alarm.time}</Text>
-                  <Text style={styles.alarmTitle}>{alarm.title}</Text>
-                  <Text style={styles.alarmType}>
+                <View style={styles.modernAlarmInfo}>
+                  <Text style={styles.modernAlarmTime}>{alarm.time}</Text>
+                  <Text style={styles.modernAlarmTitle}>{alarm.title}</Text>
+                  <Text style={styles.modernAlarmType}>
                     {alarm.type === 'prayer' ? '🙏 Prière' : '📖 Verset'}
                   </Text>
                 </View>
               </TouchableOpacity>
               
-              <View style={styles.alarmControls}>
-                {/* 🎯 NOUVEAU: Bouton Test */}
+              <View style={styles.modernAlarmControls}>
                 <TouchableOpacity
                   onPress={() => testAlarm(alarm)}
-                  style={styles.testBtn}>
-                  <Text style={styles.testIcon}>▶️</Text>
+                  style={styles.modernTestBtn}>
+                  <Text style={styles.modernTestIcon}>▶️</Text>
                 </TouchableOpacity>
                 
                 <Switch
@@ -737,27 +875,26 @@ export default function App() {
                 />
                 <TouchableOpacity
                   onPress={() => deleteAlarm(alarm.id)}
-                  style={styles.deleteBtn}>
-                  <Text style={styles.deleteIcon}>🗑️</Text>
+                  style={styles.modernDeleteBtn}>
+                  <Text style={styles.modernDeleteIcon}>🗑️</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ))}
           
           {alarms.length === 0 && (
-            <View style={styles.noAlarmsContainer}>
-              <Text style={styles.noAlarmsText}>Aucune alarme configurée</Text>
+            <View style={styles.modernNoAlarmsContainer}>
+              <Text style={styles.modernNoAlarmsText}>Aucune alarme configurée</Text>
               <TouchableOpacity
                 onPress={showAddAlarmModal_func}
-                style={styles.addFirstAlarmBtn}>
-                <Text style={styles.addFirstAlarmText}>➕ Créer ma première alarme</Text>
+                style={styles.modernAddFirstAlarmBtn}>
+                <Text style={styles.modernAddFirstAlarmText}>➕ Créer ma première alarme</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
       </ScrollView>
 
-      {/* 🎯 NOUVEAU: Modal propre pour ajouter des alarmes */}
       <AddAlarmModal
         visible={showAddAlarmModal}
         onClose={() => setShowAddAlarmModal(false)}
@@ -767,8 +904,8 @@ export default function App() {
       {renderOtherModals()}
     </View>
   );
-  // Composant Écran Radio (identique au précédent)
-   const RadioScreen = () => {
+
+  const RadioScreen = () => {
     const rotation = rotateAnim.interpolate({
       inputRange: [0, 1],
       outputRange: ['0deg', '360deg'],
@@ -780,23 +917,23 @@ export default function App() {
     });
 
     return (
-      <View style={styles.container}>
+      <View style={styles.modernContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
 
-        <View style={styles.radioHeader}>
+        <View style={styles.modernRadioHeader}>
           <TouchableOpacity
             onPress={() => setShowMenu(true)}
-            style={styles.backButton}>
-            <Text style={styles.menuIcon}>☰</Text>
+            style={styles.modernHeaderButton}>
+            <Text style={styles.modernMenuIcon}>☰</Text>
           </TouchableOpacity>
 
-          <View style={styles.headerCenter}>
-            <Text style={styles.stationName}>Radio Bonne Nouvelle</Text>
-            <Text style={styles.headerSubtitle1}>Le canal de la Grandeur</Text>
-            <Text style={styles.headerSubtitle}>103.6</Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, isConnected && styles.activeDot]} />
-              <Text style={styles.statusText}>
+          <View style={styles.modernHeaderCenter}>
+            <Text style={styles.modernStationName}>Radio Bonne Nouvelle</Text>
+            <Text style={styles.modernHeaderSubtitle1}>Le canal de la Grandeur</Text>
+            <Text style={styles.modernHeaderSubtitle}>103.6</Text>
+            <View style={styles.modernStatusRow}>
+              <View style={[styles.modernStatusDot, isConnected && styles.modernActiveDot]} />
+              <Text style={styles.modernStatusText}>
                 {isConnected ? 'EN DIRECT' : 'HORS LIGNE'}
               </Text>
             </View>
@@ -804,36 +941,36 @@ export default function App() {
 
           <TouchableOpacity
             onPress={reloadPlayer}
-            style={styles.reloadButton}>
+            style={styles.modernHeaderButton}>
             <Animated.View style={{ transform: [{ rotate: isLoading ? rotation : '0deg' }] }}>
-              <Text style={styles.reloadIcon}>⟳</Text>
+              <Text style={styles.modernReloadIcon}>⟳</Text>
             </Animated.View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.albumSection}>
+        <View style={styles.modernAlbumSection}>
           <Animated.View
             style={[
-              styles.radioWaveContainer,
+              styles.modernRadioWaveContainer,
               {
                 transform: [
                   { scale: pulseAnim }
                 ]
               }
             ]}>
-            <View style={styles.radioTower}>
-              <View style={styles.antenna}>
-                <View style={styles.antennaBase} />
-                <View style={styles.antennaRod} />
-                <View style={styles.antennaTop} />
+            <View style={styles.modernRadioTower}>
+              <View style={styles.modernAntenna}>
+                <View style={styles.modernAntennaBase} />
+                <View style={styles.modernAntennaRod} />
+                <View style={styles.modernAntennaTop} />
               </View>
 
               {isPlaying && [1, 2, 3, 4].map(i => (
                 <Animated.View
                   key={i}
                   style={[
-                    styles.radioWave,
-                    styles[`wave${i}`],
+                    styles.modernRadioWave,
+                    styles[`modernWave${i}`],
                     {
                       opacity: pulseAnim.interpolate({
                         inputRange: [1, 1.05],
@@ -850,25 +987,26 @@ export default function App() {
                 />
               ))}
 
-              <View style={styles.radioLogo}>
-                <Text style={styles.logoText}>RBN</Text>
-                <Text style={styles.logoSubtext}>📻</Text>
+              <View style={styles.modernRadioLogo}>
+                <Text style={styles.modernLogoText}>RBN</Text>
+                <Text style={styles.modernLogoSubtext}>📻</Text>
               </View>
             </View>
           </Animated.View>
 
-          <View style={styles.trackInfo}>
-            <Text style={styles.trackTitle}>
-              {isConnected ? '🔴 Live Broadcast' : '🔴 Broadcast Offline'}
+          <View style={styles.modernTrackInfo}>
+            <Text style={styles.modernTrackTitle}>
+              {isConnected ? '🟢 Live Broadcast' : '🔴 Broadcast Offline'}
             </Text>
+             <Image source={Logo} style={styles.modernLogo} />
 
             {isPlaying && (
-              <Animated.View style={styles.waveform}>
+              <Animated.View style={styles.modernWaveform}>
                 {[1, 2, 3, 4, 5].map(i => (
                   <Animated.View
                     key={i}
                     style={[
-                      styles.waveBar,
+                      styles.modernWaveBar,
                       {
                         transform: [{
                           scaleY: pulseAnim.interpolate({
@@ -885,13 +1023,13 @@ export default function App() {
           </View>
         </View>
 
-        <View style={styles.controlsSection}>
+        <View style={styles.modernControlsSection}>
           {(isPlaying || isLoading) && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressTrack}>
+            <View style={styles.modernProgressContainer}>
+              <View style={styles.modernProgressTrack}>
                 <Animated.View
                   style={[
-                    styles.progressFill,
+                    styles.modernProgressFill,
                     { width: isLoading ? '30%' : progressWidth }
                   ]}
                 />
@@ -900,37 +1038,36 @@ export default function App() {
           )}
         </View>
 
-        {/* WebView Player avec même logique qu'avant */}
         {showPlayer && (
           <Animated.View
             style={[
-              styles.playerContainer,
+              styles.modernPlayerContainer,
               {
                 transform: [{ translateY: slideAnim }]
               }
             ]}>
-            <View style={styles.playerHeader}>
-              <Text style={styles.playerTitle}>📻 Radio En ligne</Text>
-              <TouchableOpacity onPress={hidePlayer} style={styles.closePlayer}>
-                <Text style={styles.closeIcon}>✕</Text>
+            <View style={styles.modernPlayerHeader}>
+              <Text style={styles.modernPlayerTitle}>📻 Radio En ligne</Text>
+              <TouchableOpacity onPress={hidePlayer} style={styles.modernClosePlayer}>
+                <Text style={styles.modernCloseIcon}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <WebView
               key={webViewKey}
               source={{ uri: radioPlayerUrl }}
-              style={styles.webView}
+              style={styles.modernWebView}
               javaScriptEnabled={true}
               domStorageEnabled={true}
               mediaPlaybackRequiresUserAction={false}
               allowsInlineMediaPlayback={true}
               startInLoadingState={true}
               renderLoading={() => (
-                <View style={styles.loadingOverlay}>
+                <View style={styles.modernLoadingOverlay}>
                   <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                    <Text style={styles.loadingSpinner}>⟳</Text>
+                    <Text style={styles.modernLoadingSpinner}>⟳</Text>
                   </Animated.View>
-                  <Text style={styles.loadingText}>Chargement...</Text>
+                  <Text style={styles.modernLoadingText}>Chargement...</Text>
                 </View>
               )}
               onLoad={() => {
@@ -939,7 +1076,6 @@ export default function App() {
                 setIsConnected(true);
                 setIsPlaying(true);
 
-                // 🔥 RESTAURATION DE L'AUTO-PLAY AUTOMATIQUE
                 setTimeout(() => {
                   webViewRef.current?.injectJavaScript(`
                     try {
@@ -1029,7 +1165,6 @@ export default function App() {
                   `);
                 }, 3000);
 
-                // Observer pour les changements de titre
                 setTimeout(() => {
                   webViewRef.current?.injectJavaScript(`
                     const titleObserver = () => {
@@ -1084,34 +1219,10 @@ export default function App() {
             />
           </Animated.View>
         )}
-
-        <View style={styles.bottomControls}>
-          {!showPlayer ? (
-            <TouchableOpacity
-              style={styles.showPlayerBtn}
-              onPress={showRadioPlayer}>
-              <Text style={styles.showPlayerText}>📻 Écouter la Radio</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.playerControls}>
-              <TouchableOpacity
-                style={[
-                  styles.statusButton,
-                  isConnected ? styles.statusButtonOnline : styles.statusButtonOffline
-                ]}
-                onPress={() => Alert.alert('Statut', isConnected ? 'Radio en ligne' : 'Radio hors ligne')}>
-                <Text style={styles.statusButtonText}>
-                  {isConnected ? 'Live Broadcast' : 'Broadcast Offline'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
       </View>
     );
   };
 
-  // Fonction pour rendre les autres modals
   const renderOtherModals = () => (
     <>
       <Modal
@@ -1119,30 +1230,30 @@ export default function App() {
         animationType="fade"
         transparent={true}
         onRequestClose={() => setShowAlarmDetailModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+        <View style={styles.modernModalOverlay}>
+          <View style={styles.modernModalContainer}>
             {selectedAlarm && (
               <>
-                <Text style={styles.modalTitle}>🔔 {selectedAlarm.title}</Text>
-                <Text style={styles.alarmDetailTime}>⏰ {selectedAlarm.time}</Text>
+                <Text style={styles.modernModalTitle}>🔔 {selectedAlarm.title}</Text>
+                <Text style={styles.modernAlarmDetailTime}>⏰ {selectedAlarm.time}</Text>
                 
-                <View style={styles.alarmContent}>
+                <View style={styles.modernAlarmContent}>
                   {selectedAlarm.type === 'verse' && (
                     <>
-                      <Text style={styles.verseDetailText}>"{selectedAlarm.content.text}"</Text>
-                      <Text style={styles.verseDetailRef}>— {selectedAlarm.content.ref}</Text>
+                      <Text style={styles.modernVerseDetailText}>"{selectedAlarm.content.text}"</Text>
+                      <Text style={styles.modernVerseDetailRef}>— {selectedAlarm.content.ref}</Text>
                     </>
                   )}
                   
                   {selectedAlarm.type === 'prayer' && (
-                    <Text style={styles.prayerDetailText}>{selectedAlarm.content.text}</Text>
+                    <Text style={styles.modernPrayerDetailText}>{selectedAlarm.content.text}</Text>
                   )}
                 </View>
                 
                 <TouchableOpacity
-                  style={styles.closeModalBtn}
+                  style={styles.modernCloseModalBtn}
                   onPress={() => setShowAlarmDetailModal(false)}>
-                  <Text style={styles.closeModalText}>Fermer</Text>
+                  <Text style={styles.modernCloseModalText}>Fermer</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1155,22 +1266,22 @@ export default function App() {
         animationType="fade"
         transparent={true}
         onRequestClose={() => setShowVerseModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>📖 Verset à méditer</Text>
-            <Text style={styles.verseModalText}>"{dailyVerse.text}"</Text>
-            <Text style={styles.verseModalRef}>— {dailyVerse.ref}</Text>
+        <View style={styles.modernModalOverlay}>
+          <View style={styles.modernModalContainer}>
+            <Text style={styles.modernModalTitle}>📖 Verset à méditer</Text>
+            <Text style={styles.modernVerseModalText}>"{dailyVerse.text}"</Text>
+            <Text style={styles.modernVerseModalRef}>— {dailyVerse.ref}</Text>
             
-            <View style={styles.verseModalButtons}>
+            <View style={styles.modernVerseModalButtons}>
               <TouchableOpacity
-                style={styles.newVerseBtn}
+                style={styles.modernNewVerseBtn}
                 onPress={getRandomVerse}>
-                <Text style={styles.newVerseText}>🔄 Nouveau verset</Text>
+                <Text style={styles.modernNewVerseText}>🔄 Nouveau verset</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.closeModalBtn}
+                style={styles.modernCloseModalBtn}
                 onPress={() => setShowVerseModal(false)}>
-                <Text style={styles.closeModalText}>Fermer</Text>
+                <Text style={styles.modernCloseModalText}>Fermer</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1179,7 +1290,6 @@ export default function App() {
     </>
   );
 
-  // Rendu principal avec navigation
   const renderCurrentScreen = () => {
     switch (currentScreen) {
       case 'alarms':
@@ -1192,662 +1302,391 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.modernSafeArea}>
       {renderCurrentScreen()}
       <MenuOverlay />
+      <CinetPayModal/>
     </SafeAreaView>
   );
 }
 
-// 🎯 STYLES AVEC LES NOUVELLES SECTIONS
+// STYLES MODERNES (mis à jour pour CinetPay)
 const styles = StyleSheet.create({
-  safeArea: {
+  modernSafeArea: {
     flex: 1,
     backgroundColor: '#1a4a1a',
   },
-  container: {
+  modernContainer: {
     flex: 1,
     backgroundColor: '#1a4a1a',
   },
   
-  // Menu Styles
-  menuOverlay: {
+  // Menu moderne
+  modernMenuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuModal: {
+  modernMenuModal: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 30,
+    padding: 30,
     width: width * 0.85,
-    maxHeight: height * 0.6,
+    maxHeight: height * 0.7,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 20,
   },
-  menuModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 25,
-  },
-  menuModalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    backgroundColor: '#e8e8e8',
-    borderRadius: 15,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  activeMenuItem: {
-    backgroundColor: '#2e7d32',
-    shadowColor: '#2e7d32',
-    shadowOpacity: 0.3,
-  },
-  menuModalIcon: {
+  modernMenuModalTitle: {
     fontSize: 24,
-    marginRight: 15,
-    width: 30,
-    textAlign: 'center',
-  },
-  menuModalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  activeIndicator: {
-    fontSize: 20,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  menuModalClose: {
-    marginTop: 20,
-    paddingVertical: 15,
-    backgroundColor: '#666666',
-    borderRadius: 15,
-    alignItems: 'center',
-  },
-  menuModalCloseText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-
-  // 🎯 NOUVEAUX STYLES POUR MODAL D'AJOUT D'ALARME
-  addAlarmContainer: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  addAlarmHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#2e7d32',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  addAlarmTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  cancelButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 15,
-  },
-  cancelButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  saveButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 15,
-  },
-  saveButtonText: {
-    color: '#2e7d32',
-    fontWeight: 'bold',
-  },
-  addAlarmContent: {
-    flex: 1,
-    padding: 20,
-  },
-  formGroup: {
-    marginBottom: 25,
-  },
-  formLabel: {
-    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 10,
-  },
-  formInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  timeButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  timeButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2e7d32',
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  typeOption: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: '#e8e8e8',
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedType: {
-    backgroundColor: '#2e7d32',
-    borderColor: '#2e7d32',
-  },
-  typeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  selectedTypeText: {
-    color: '#ffffff',
-  },
-  previewContainer: {
-    backgroundColor: '#f9f9f9',
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  previewText: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    lineHeight: 20,
-  },
-  previewRef: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'right',
-    marginTop: 8,
-  },
-
-  // 🎯 NOUVEAUX STYLES POUR LES DONS
-  donationScrollView: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  donationIntroCard: {
-    backgroundColor: '#2e7d32',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-  },
-  donationIntroTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 15,
     textAlign: 'center',
-  },
-  donationIntroText: {
-    fontSize: 16,
-    color: '#ffffff',
-    lineHeight: 24,
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  donationVerse: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontStyle: 'italic',
-    lineHeight: 24,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  donationVerseRef: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-  },
-  donationAmountsCard: {
-    backgroundColor: '#333',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-  },
-  donationSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 15,
-  },
-  donationAmountsGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  donationAmountBtn: {
-    flex: 1,
-    paddingVertical: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedDonationAmount: {
-    backgroundColor: '#4caf50',
-    borderColor: '#4caf50',
-  },
-  donationAmountText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  selectedDonationAmountText: {
-    color: '#ffffff',
-  },
-  donationFormCard: {
-    backgroundColor: '#2a2a2a',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-  },
-  donationFormGroup: {
-    marginBottom: 20,
-  },
-  donationFormLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 10,
-  },
-  donationFormInput: {
-    borderWidth: 1,
-    borderColor: '#555',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: '#444',
-    color: '#ffffff',
-  },
-  donateBtn: {
-    backgroundColor: '#4caf50',
-    paddingVertical: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 15,
-    shadowColor: '#4caf50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  donateBtnText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  donationNote: {
-    fontSize: 12,
-    color: '#aaa',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  testimonialsCard: {
-    backgroundColor: '#333',
-    padding: 20,
-    borderRadius: 15,
     marginBottom: 30,
   },
-  testimonial: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 15,
-    borderRadius: 10,
+  modernMenuModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 25,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 20,
     marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  testimonialText: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontStyle: 'italic',
-    lineHeight: 20,
-    marginBottom: 8,
+  modernActiveMenuItem: {
+    backgroundColor: '#2e7d32',
+    shadowColor: '#2e7d32',
+    shadowOpacity: 0.4,
   },
-  testimonialAuthor: {
-    fontSize: 12,
-    color: '#aaa',
-    textAlign: 'right',
+  modernMenuModalIcon: {
+    fontSize: 28,
+    marginRight: 20,
+    width: 35,
+    textAlign: 'center',
   },
-
-  // 🎯 STYLES POUR LE BOUTON TEST
-  testBtn: {
-    padding: 8,
-    marginRight: 10,
-  },
-  testIcon: {
-    fontSize: 16,
-  },
-  alarmMainInfo: {
+  modernMenuModalText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
     flex: 1,
   },
+  modernActiveIndicator: {
+    fontSize: 24,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  modernMenuModalClose: {
+    marginTop: 25,
+    paddingVertical: 18,
+    backgroundColor: '#6c757d',
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  modernMenuModalCloseText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
 
-  // Styles existants (radio, alarmes, etc.)
-  radioHeader: {
+  // Header moderne
+  modernRadioHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 20,
     marginTop: Platform.OS === 'ios' ? 10 : 20,
+    backgroundColor: '#1a4a1a',
   },
-  backButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  modernHeaderButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  menuIcon: {
-    fontSize: 20,
+  modernMenuIcon: {
+    fontSize: 22,
     color: '#ffffff',
     fontWeight: 'bold',
   },
-  headerCenter: {
+  modernReloadIcon: {
+    fontSize: 24,
+    color: '#ffffff',
+  },
+  modernHeaderCenter: {
     flex: 1,
     alignItems: 'center',
   },
-  stationName: {
-    fontSize: 18,
+  modernLogoContainer: {
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernHeaderLogo: {
+    width: 150,
+    height: 150,
+    marginTop:200,
+    borderRadius:15,
+  },
+  modernStationName: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 5,
+    marginBottom: 8,
   },
-  headerSubtitle1: {
-    fontSize: 14,
+  modernHeaderSubtitle1: {
+    fontSize: 16,
     color: '#ffffff',
     opacity: 0.9,
+    marginBottom: 4,
   },
-  headerSubtitle: {
-    fontSize: 14,
+  modernHeaderSubtitle: {
+    fontSize: 16,
     color: '#ffffff',
     fontWeight: 'bold',
     opacity: 0.9,
+    marginBottom: 8,
   },
-  statusRow: {
+  modernStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 5,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  modernStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#666',
-    marginRight: 8,
+    marginRight: 10,
   },
-  activeDot: {
+  modernActiveDot: {
     backgroundColor: '#4caf50',
   },
-  statusText: {
-    fontSize: 12,
+  modernStatusText: {
+    fontSize: 14,
     color: '#aaa',
     fontWeight: '600',
   },
-  reloadButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reloadIcon: {
-    fontSize: 24,
-    color: '#ffffff',
-  },
-  addButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+  modernAddButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#4caf50',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#4caf50',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  addIcon: {
-    fontSize: 24,
+  modernAddIcon: {
+    fontSize: 28,
     color: '#ffffff',
     fontWeight: 'bold',
   },
-  
-  albumSection: {
+
+  // Radio section moderne
+  modernAlbumSection: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: 40,
   },
-  radioWaveContainer: {
-    marginBottom: 30,
+  modernRadioWaveContainer: {
+    marginBottom: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioTower: {
-    width: 280,
-    height: 280,
+  modernRadioTower: {
+    width: 300,
+    height: 300,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
-  antenna: {
+  modernAntenna: {
     position: 'absolute',
-    top: 50,
+    top: 40,
     alignItems: 'center',
     zIndex: 10,
   },
-  antennaBase: {
-    width: 8,
-    height: 60,
+  modernAntennaBase: {
+    width: 10,
+    height: 70,
     backgroundColor: '#ffffff',
-    borderRadius: 4,
+    borderRadius: 5,
   },
-  antennaRod: {
-    width: 4,
-    height: 80,
+  modernAntennaRod: {
+    width: 5,
+    height: 90,
     backgroundColor: '#ffffff',
-    borderRadius: 2,
+    borderRadius: 2.5,
   },
-  antennaTop: {
-    width: 12,
-    height: 12,
+  modernAntennaTop: {
+    width: 15,
+    height: 15,
     backgroundColor: '#ff4444',
-    borderRadius: 6,
+    borderRadius: 7.5,
   },
-  radioWave: {
+  modernRadioWave: {
     position: 'absolute',
-    borderWidth: 3,
+    borderWidth: 4,
     borderRadius: 9999,
   },
-  wave1: {
-    width: 120,
-    height: 120,
+  modernWave1: {
+    width: 130,
+    height: 130,
     borderColor: '#888888',
   },
-  wave2: {
-    width: 160,
-    height: 160,
+  modernWave2: {
+    width: 170,
+    height: 170,
     borderColor: '#aaaaaa',
   },
-  wave3: {
-    width: 200,
-    height: 200,
+  modernWave3: {
+    width: 210,
+    height: 210,
     borderColor: '#cccccc',
   },
-  wave4: {
-    width: 240,
-    height: 240,
+  modernWave4: {
+    width: 250,
+    height: 250,
     borderColor: '#ffffff',
   },
-  radioLogo: {
+  modernRadioLogo: {
     position: 'absolute',
-    bottom: 80,
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    bottom: 90,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#2e7d32',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 25,
+    borderWidth: 5,
+    borderColor: '#ffffff',
+  },
+  modernLogoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  modernLogoSubtext: {
+    fontSize: 18,
+    marginTop: -2,
+  },
+  modernTrackInfo: {
+    alignItems: 'center',
+  },
+  modernLogo:{
+    width:130,
+    height:130,
+    borderRadius:15,
+  },
+  modernTrackTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modernWaveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modernWaveBar: {
+    width: 4,
+    height: 24,
+    backgroundColor: '#4caf50',
+    borderRadius: 2,
+  },
+  modernControlsSection: {
+    paddingHorizontal: 50,
+    paddingVertical: 25,
+  },
+  modernProgressContainer: {
+    alignItems: 'center',
+  },
+  modernProgressTrack: {
+    width: width - 100,
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
+    marginBottom: 15,
+  },
+  modernProgressFill: {
+    height: 6,
+    backgroundColor: '#4caf50',
+    borderRadius: 3,
+  },
+
+  // Player moderne
+  modernPlayerContainer: {
+    position: 'absolute',
+    top: 280,
+    left: 20,
+    right: 20,
+    height: height * 0.23,
+    backgroundColor: '#ffffff',
+    borderRadius: 25,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 15 },
     shadowOpacity: 0.4,
     shadowRadius: 25,
     elevation: 20,
-    borderWidth: 4,
-    borderColor: '#ffffff',
-  },
-  logoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  logoSubtext: {
-    fontSize: 16,
-    marginTop: -2,
-  },
-  trackInfo: {
-    alignItems: 'center',
-  },
-  trackTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  waveform: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  waveBar: {
-    width: 3,
-    height: 20,
-    backgroundColor: '#4caf50',
-    borderRadius: 1.5,
-  },
-  controlsSection: {
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-  },
-  progressContainer: {
-    alignItems: 'center',
-  },
-  progressTrack: {
-    width: width - 80,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 2,
-    marginBottom: 12,
-  },
-  progressFill: {
-    height: 4,
-    backgroundColor: '#4caf50',
-    borderRadius: 2,
-  },
-  
-  playerContainer: {
-    position: 'absolute',
-    top: 260,
-    left: 15,
-    right: 15,
-    height: height * 0.25,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
     overflow: 'hidden',
   },
-  playerHeader: {
+  modernPlayerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#e9ecef',
   },
-  playerTitle: {
-    fontSize: 16,
+  modernPlayerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
   },
-  closePlayer: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  modernClosePlayer: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
     backgroundColor: '#ff4444',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeIcon: {
-    fontSize: 14,
+  modernCloseIcon: {
+    fontSize: 16,
     color: '#ffffff',
     fontWeight: 'bold',
   },
-  webView: {
+  modernWebView: {
     flex: 1,
   },
-  loadingOverlay: {
+  modernLoadingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -1857,310 +1696,640 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingSpinner: {
-    fontSize: 32,
+  modernLoadingSpinner: {
+    fontSize: 36,
     color: '#2e7d32',
-    marginBottom: 10,
+    marginBottom: 15,
   },
-  loadingText: {
-    fontSize: 16,
+  modernLoadingText: {
+    fontSize: 18,
     color: '#2e7d32',
     fontWeight: '600',
   },
-  bottomControls: {
-    position: 'absolute',
-    bottom: 30,
-    left: 20,
-    right: 20,
-  },
-  showPlayerBtn: {
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    backgroundColor: '#4caf50',
-    borderRadius: 25,
-    alignItems: 'center',
-    shadowColor: '#4caf50',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  showPlayerText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  playerControls: {
-    alignItems: 'center',
-  },
-  statusButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  statusButtonOnline: {
-    backgroundColor: '#4caf50',
-  },
-  statusButtonOffline: {
-    backgroundColor: '#f44336',
-  },
-  statusButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  
-  // Alarmes Styles
-  alarmsScrollView: {
+
+  // Alarmes modernes
+  modernAlarmsScrollView: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  verseCard: {
-    backgroundColor: '#2e7d32',
-    padding: 20,
-    borderRadius: 15,
+  modernVerseCard: {
+    backgroundColor: '#f4f4f4ff',
+    padding: 25,
+    borderRadius: 20,
     marginBottom: 20,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modernVerseTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#141313ff',
+    marginBottom: 15,
+  },
+  modernVerseText: {
+    fontSize: 17,
+    color: '#292525ff',
+    fontStyle: 'italic',
+    lineHeight: 26,
+    marginBottom: 12,
+  },
+  modernVerseRef: {
+    fontSize: 15,
+    color: 'rgba(25, 23, 23, 0.8)',
+    textAlign: 'right',
+    marginBottom: 20,
+  },
+  modernRefreshVerseBtn: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(29, 27, 27, 0.2)',
+    borderRadius: 25,
+  },
+  modernRefreshVerseText: {
+    color: '#161515ff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modernQuickActionsCard: {
+    backgroundColor: '#f4f4f4ff',
+    padding: 25,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  modernQuickActionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000000ff',
+    marginBottom: 20,
+  },
+  modernQuickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  modernQuickActionBtn: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: ' rgba(65, 59, 59, 0.1)',
+    borderRadius: 15,
+    minWidth: 140,
+  },
+  modernQuickActionIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  modernQuickActionText: {
+    color: '#0e0d0dff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modernAlarmsListCard: {
+    backgroundColor: '#f4f4f4ff',
+    padding: 25,
+    borderRadius: 20,
+    marginBottom: 40,
+  },
+  modernAlarmsListTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0a0a0aff',
+    marginBottom: 20,
+  },
+  modernAlarmItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(65, 59, 59, 0.1)',
+    borderRadius: 15,
+    marginBottom: 12,
+  },
+  modernDisabledAlarm: {
+    opacity: 0.5,
+  },
+  modernAlarmMainInfo: {
+    flex: 1,
+  },
+  modernAlarmInfo: {
+    flex: 1,
+  },
+  modernAlarmTime: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  modernAlarmTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#433a3aff',
+    marginTop: 4,
+  },
+  modernAlarmType: {
+    fontSize: 14,
+    color: '#403a3aff',
+    marginTop: 4,
+  },
+  modernAlarmControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modernTestBtn: {
+    padding: 10,
+  },
+  modernTestIcon: {
+    fontSize: 18,
+  },
+  modernDeleteBtn: {
+    padding: 8,
+  },
+  modernDeleteIcon: {
+    fontSize: 18,
+  },
+  modernNoAlarmsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  modernNoAlarmsText: {
+    fontSize: 18,
+    color: '#aaa',
+    marginBottom: 20,
+  },
+  modernAddFirstAlarmBtn: {
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    backgroundColor: '#4caf50',
+    borderRadius: 30,
+  },
+  modernAddFirstAlarmText: {
+    color: '#e3d7d7ff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+
+  // Modal moderne pour ajouter alarme
+  addAlarmContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  addAlarmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
+    paddingVertical: 20,
+    backgroundColor: '#2e7d32',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 8,
   },
-  verseTitle: {
-    fontSize: 18,
+  addAlarmTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 10,
   },
-  verseText: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontStyle: 'italic',
-    lineHeight: 24,
-    marginBottom: 8,
-  },
-  verseRef: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'right',
-    marginBottom: 15,
-  },
-  refreshVerseBtn: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+  modernCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
   },
-  refreshVerseText: {
+  modernCancelButtonText: {
     color: '#ffffff',
-    fontSize: 12,
     fontWeight: '600',
-  },
-  quickActionsCard: {
-    backgroundColor: '#333',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-  },
-  quickActionsTitle: {
     fontSize: 16,
+  },
+  modernSaveButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20,
+  },
+  modernSaveButtonText: {
+    color: '#2e7d32',
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 15,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  quickActionBtn: {
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    minWidth: 120,
-  },
-  quickActionIcon: {
-    fontSize: 24,
-    marginBottom: 5,
-  },
-  quickActionText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  alarmsListCard: {
-    backgroundColor: '#2a2a2a',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-  },
-  alarmsListTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 15,
   },
-  alarmItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  disabledAlarm: {
-    opacity: 0.5,
-  },
-  alarmInfo: {
+  addAlarmContent: {
     flex: 1,
+    padding: 25,
   },
-  alarmTime: {
+  formGroup: {
+    marginBottom: 30,
+  },
+  formLabel: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4caf50',
+    color: '#333',
+    marginBottom: 12,
   },
-  alarmTitle: {
-    fontSize: 16,
+  modernFormInput: {
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderRadius: 15,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    fontSize: 17,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modernTimeButton: {
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderRadius: 15,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modernTimeButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2e7d32',
+  },
+  modernTypeSelector: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  modernTypeOption: {
+    flex: 1,
+    paddingVertical: 18,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  modernSelectedType: {
+    backgroundColor: '#2e7d32',
+    borderColor: '#2e7d32',
+  },
+  modernTypeText: {
+    fontSize: 17,
     fontWeight: '600',
+    color: '#333',
+  },
+  modernSelectedTypeText: {
     color: '#ffffff',
-    marginTop: 2,
   },
-  alarmType: {
-    fontSize: 12,
-    color: '#aaa',
-    marginTop: 2,
+  modernPreviewContainer: {
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
   },
-  alarmControls: {
+  previewText: {
+    fontSize: 15,
+    color: '#666',
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+  previewRef: {
+    fontSize: 13,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 10,
+  },
+
+  // Donation moderne avec saisie du montant
+  modernDonationContainer: {
+    flex: 1,
+    padding: 25,
+    justifyContent: 'center',
+  },
+  modernMainDonationCard: {
+    backgroundColor: '#f4f4f4ff',
+    borderRadius: 25,
+    padding: 35,
+    alignItems: 'center',
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 12,
+  },
+  modernDonationTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4f4646ff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modernDonationSubtitle: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  modernAmountLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modernQuickAmountContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 25,
+  },
+  modernQuickAmountBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modernSelectedAmountBtn: {
+    backgroundColor: '#2e7d32',
+    borderColor: '#2e7d32',
+  },
+  modernQuickAmountText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modernSelectedAmountText: {
+    color: '#ffffff',
+  },
+  modernCustomAmountLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modernCustomAmountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 15,
+    marginBottom: 20,
+  },
+  modernAmountInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    paddingVertical: 15,
+    textAlign: 'center',
+    color: '#333',
+  },
+  modernCurrencyText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+    marginLeft: 10,
+  },
+  modernDonorInfoContainer: {
+    marginBottom: 25,
     gap: 10,
   },
-  deleteBtn: {
-    padding: 5,
-  },
-  deleteIcon: {
+  modernDonorInput: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     fontSize: 16,
+    color: '#333',
   },
-  noAlarmsContainer: {
+  modernMainDonationBtn: {
+    backgroundColor: 'rgba(65, 59, 59, 0.1)',
+    borderRadius: 20,
+    paddingVertical: 25,
+    paddingHorizontal: 50,
     alignItems: 'center',
-    paddingVertical: 30,
+    minWidth: '100%',
+    marginBottom: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  noAlarmsText: {
+  modernDonationBtnText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2b2c2dff',
+    marginBottom: 8,
+  },
+  modernDonationBtnDisabled: {
+    opacity: 0.6,
+  },
+  don: {
+    fontSize: 24,
+  },
+  modernPaymentInfo: {
     fontSize: 16,
-    color: '#aaa',
+    color: '#4caf50',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modernPaymentDetails: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  modernPaymentNote: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    padding: 10,
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4caf50',
     marginBottom: 15,
   },
-  addFirstAlarmBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#4caf50',
-    borderRadius: 25,
+  modernNoteText: {
+    fontSize: 13,
+    color: '#2e7d32',
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  addFirstAlarmText: {
-    color: '#ffffff',
+  modernThankYouCard: {
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+  },
+  modernThankYouText: {
+    fontSize: 18,
+    color: '#FFD700',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+
+  // CinetPay Modal (remplace MoneyFusion)
+  cinetPayContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  modernCinetPayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
+    paddingVertical: 20,
+    backgroundColor: '#2e7d32',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modernCinetPayTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#ffffff',
+    marginLeft: 30,
   },
-  
-  // Modal Styles
-  modalOverlay: {
+  modernBackButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+  },
+  modernBackButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  cinetPayWebView: {
+    flex: 1,
+  },
+
+  // Modals modernes
+  modernModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContainer: {
+  modernModalContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 25,
+    padding: 30,
     width: width * 0.9,
     maxHeight: height * 0.8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.4,
+    shadowRadius: 25,
+    elevation: 20,
   },
-  modalTitle: {
-    fontSize: 20,
+  modernModalTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 20,
+    marginBottom: 25,
     textAlign: 'center',
   },
-  alarmDetailTime: {
-    fontSize: 24,
+  modernAlarmDetailTime: {
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#4caf50',
     textAlign: 'center',
-    marginBottom: 20,
-  },
-  alarmContent: {
-    backgroundColor: '#f9f9f9',
-    padding: 20,
-    borderRadius: 15,
     marginBottom: 25,
-    minHeight: 100,
   },
-  verseDetailText: {
-    fontSize: 16,
+  modernAlarmContent: {
+    backgroundColor: '#f8f9fa',
+    padding: 25,
+    borderRadius: 20,
+    marginBottom: 30,
+    minHeight: 120,
+  },
+  modernVerseDetailText: {
+    fontSize: 17,
     fontStyle: 'italic',
     color: '#333',
-    lineHeight: 24,
-    marginBottom: 15,
+    lineHeight: 27,
+    marginBottom: 18,
   },
-  verseDetailRef: {
-    fontSize: 14,
+  modernVerseDetailRef: {
+    fontSize: 15,
     color: '#666',
     textAlign: 'right',
     fontWeight: '600',
   },
-  prayerDetailText: {
-    fontSize: 16,
+  modernPrayerDetailText: {
+    fontSize: 17,
     color: '#333',
-    lineHeight: 24,
+    lineHeight: 27,
     textAlign: 'center',
   },
-  closeModalBtn: {
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    backgroundColor: '#4caf50',
-    borderRadius: 25,
+  modernCloseModalBtn: {
+    paddingVertical: 18,
+    paddingHorizontal: 35,
+    backgroundColor: '#697469ff',
+    borderRadius: 30,
     alignItems: 'center',
     alignSelf: 'center',
   },
-  closeModalText: {
-    fontSize: 16,
+  modernCloseModalText: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
   },
-  verseModalText: {
-    fontSize: 18,
+  modernVerseModalText: {
+    fontSize: 20,
     fontStyle: 'italic',
     color: '#333',
-    lineHeight: 26,
-    marginBottom: 15,
+    lineHeight: 30,
+    marginBottom: 20,
     textAlign: 'center',
   },
-  verseModalRef: {
-    fontSize: 16,
+  modernVerseModalRef: {
+    fontSize: 18,
     color: '#666',
     textAlign: 'center',
     fontWeight: '600',
-    marginBottom: 25,
+    marginBottom: 30,
   },
-  verseModalButtons: {
+  modernVerseModalButtons: {
     flexDirection: 'row',
-    gap: 15,
+    gap: 20,
     justifyContent: 'center',
   },
-  newVerseBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
+  modernNewVerseBtn: {
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 25,
     alignItems: 'center',
   },
-  newVerseText: {
-    fontSize: 14,
+  modernNewVerseText: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#666',
   },
 });
+
