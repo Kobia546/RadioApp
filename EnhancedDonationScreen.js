@@ -27,7 +27,7 @@ const EXCHANGE_RATES = {
 const CURRENCIES = [
   { code: 'CFA', symbol: 'f', name: 'Franc CFA', color: '#4caf50', gradient: ['#4caf50', '#66bb6a'] },
   { code: 'EUR', symbol: '€', name: 'Euro', color: '#2e7d32', gradient: ['#2e7d32', '#4caf50'] },
-  { code: 'USD', symbol: '$', name: 'Dollar US', color: '#1b5e20', gradient: ['#1b5e20', '#2e7d32'] },
+  { code: 'USD', symbol: '$', name: 'Dollar US&', color: '#1b5e20', gradient: ['#1b5e20', '#2e7d32'] },
 ];
 
 const PREDEFINED_AMOUNTS = {
