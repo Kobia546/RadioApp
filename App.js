@@ -103,20 +103,23 @@ const ALARM_SOUNDS = [
 // Types de dons pour chaque section
 const DONATION_TYPES = {
   EGLISE: [
-    { id: 'dimes', name: ' Dîmes', icon: '💰', color: '#4caf50' },
-    { id: 'offrandes', name: ' Offrandes', icon: '🎁', color: '#2196f3' },
-    { id: 'voeux', name: ' Vœux', icon: '🙏', color: '#ff9800' },
-    { id: 'engagements', name: ' Engagements', icon: '📋', color: '#9c27b0' },
-    { id: 'action_grace', name: ' Action de Grâce', icon: '✨', color: '#e91e63' },
-    { id: 'soutien_programme', name: ' Soutien Programme', icon: '🎯', color: '#607d8b' },
+    { id: 'dimes', name: ' Dîmes',  color: '#4caf50' },
+    { id: 'offrandes', name: ' Offrandes',  color: '#2196f3' },
+    { id: 'voeux', name: ' Vœux',  color: '#ff9800' },
+    { id: 'engagements', name: ' Engagements',  color: '#9c27b0' },
+    { id: 'action_grace', name: ' Action de Grâce',  color: '#e91e63' },
+    { id: 'soutien_programme', name: ' Soutien Programme',  color: '#607d8b' },
   ],
   MINISTERE: [
-    { id: 'offrandes', name: 'Offrandes', icon: '🎁', color: '#2196f3' },
-    { id: 'voeux', name: ' Vœux', icon: '🙏', color: '#ff9800' },
-    { id: 'action_grace', name: 'Action de Grâce', icon: '✨', color: '#e91e63' },
+ { id: 'dimes', name: ' Dîmes',  color: '#4caf50' },
+    { id: 'offrandes', name: ' Offrandes',  color: '#2196f3' },
+    { id: 'voeux', name: ' Vœux',  color: '#ff9800' },
+    { id: 'engagements', name: ' Engagements',  color: '#9c27b0' },
+    { id: 'action_grace', name: ' Action de Grâce',  color: '#e91e63' },
+    { id: 'soutien_programme', name: ' Soutien Programme',  color: '#607d8b' },
   ],
   RADIO: [
-    { id: 'soutien_radio', name: ' Soutien Radio', icon: '📻', color: '#4caf50' },
+    { id: 'soutien_radio', name: ' Soutien Radio', color: '#4caf50' },
   ]
 };
 
@@ -171,7 +174,7 @@ const HomeScreen = ({ onNavigate }) => {
     },
     {
       id: 'eglise',
-      title: 'Eglise MC2G Groupe            ',
+      title: 'Eglise MC2G            ',
       subtitle: 'Dîmes & Offrandes',
       image: require('../Radioci/assets/images/eglise.jpeg'),
       // imageUri: 'https://votre-domaine.com/images/eglise.png',
@@ -1119,7 +1122,7 @@ const EgliseScreen = ({ onNavigate, onBack }) => {
             resizeMode="contain"
           />
         </View>
-        <Text style={styles.sectionTitle}>Eglise MC2G Groupe</Text>
+        <Text style={styles.sectionTitle}>Eglise MC2G </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1172,9 +1175,7 @@ const DonationTypeDropdown = ({ section, selectedType, onSelectType }) => {
         onPress={() => setShowDropdown(!showDropdown)}>
         
         <View style={styles.dropdownButtonContent}>
-          <Text style={styles.dropdownIcon}>
-            {selectedType ? selectedType.icon : '🎁'}
-          </Text>
+          
           <Text style={styles.dropdownText}>
             {selectedType ? selectedType.name : 'Choisir le type de don...'}
           </Text>
@@ -1268,11 +1269,11 @@ const EnhancedDonationScreen = ({ section, donationType, fromQR, onBack }) => {
         description: description, // ← ICI C'EST CE QUI COMPTE !
         return_url: CINETPAY_CONFIG.return_url,
         notify_url: CINETPAY_CONFIG.notify_url,
-        channels: 'ALL',  // Cartes + Mobile Money
+        channels: 'ALL', 
         lang: 'fr',
         customer_id: '1',
         customer_name: donorName || 'Donateur',
-        customer_surname: '',
+        customer_surname: donorName || 'Anonyme',
         customer_email: donorEmail || 'contact@radiobonnenouvelle.com',
         customer_phone_number: '+2250000000000',
         customer_address: 'Cocody Angré',
@@ -1601,12 +1602,17 @@ const EnhancedDonationScreen = ({ section, donationType, fromQR, onBack }) => {
           end={{ x: 1, y: 1 }}
           style={styles.donationCard}>
           
-          <Text style={styles.donationCardTitle}>🎁 Faire un Don</Text>
+           <Text style={styles.donationCardTitle}>
+  {section === 'EGLISE' 
+    ? ' DON A L\'EGLISE MC2G' 
+    : section === 'MINISTERE' 
+    ? ' DON A FEA BENIDEDIEU Ministries' 
+    : ' DON A LA RADIO BONNE NOUVELLE'}
+</Text>
           <Text style={styles.donationCardSubtitle}>
-            {sectionName}{fromQR ? ' (QR Code)' : ''}
+          {fromQR ? ' (QR Code)' : ''}
           </Text>
 
-          {/* NOUVEAU: Dropdown pour toutes les sections sauf RADIO */}
           {section !== 'RADIO' && (
             <DonationTypeDropdown 
               section={section}
@@ -1704,7 +1710,7 @@ const EnhancedDonationScreen = ({ section, donationType, fromQR, onBack }) => {
               end={{ x: 1, y: 1 }}
               style={styles.donateButtonGradient}>
               
-              <Text style={styles.donateButtonIcon}>🎁</Text> 
+             
               <Text style={styles.donateButtonText}>
                 {isGeneratingPayment 
                   ? 'Génération du paiement...' 
@@ -1743,20 +1749,13 @@ const ChurchPaymentApp = () => {
   const [fromQR, setFromQR] = useState(false);
   const [showTypeSelector, setShowTypeSelector] = useState(false); // TEMPORAIRE pour éviter l'erreur
 
-  const navigate = (screen, params = {}) => {
+const navigate = (screen, params = {}) => {
     if (screen === 'donation' && params.section) {
-      // Si c'est depuis un QR code, aller directement à l'écran de don
-      if (params.fromQR) {
-        setSelectedSection(params.section);
-        setSelectedType(null); // Pas de type pré-sélectionné pour QR
-        setFromQR(true); // NOUVEAU
-        setCurrentScreen('donation');
-      } else {
-        // Sinon, afficher le modal de sélection
-        setSelectedSection(params.section);
-        setFromQR(false); // NOUVEAU
-        setShowTypeSelector(true);
-      }
+      // Aller directement à l'écran de don pour toutes les sections
+      setSelectedSection(params.section);
+      setSelectedType(null); 
+      setFromQR(params.fromQR || false);
+      setCurrentScreen('donation');
     } else {
       setCurrentScreen(screen);
     }
@@ -2103,26 +2102,29 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? height * 0.06 : height * 0.04,
     paddingBottom: height * 0.04,
     paddingHorizontal: width * 0.08,
+    backgroundColor:'#c9c29dff',
+    borderBottomRightRadius:120,
+    borderBottomLeftRadius:120
   },
   
   homeTitle: {
     fontSize: width * 0.07,
     fontWeight: 'bold',
-    color: '#1f1c1cff',
+    color: '#205e37ff',
     textAlign: 'center',
     marginBottom: height * 0.02,
   },
   
   homeSubtitle: {
     fontSize: width * 0.045,
-    color: '#040404ff',
+    color: '#cd4545ff',
     opacity: 0.9,
     textAlign: 'center',
     marginBottom: height * 0.015,
   },
   
   frequencyContainer: {
-    backgroundColor: 'rgba(70, 63, 63, 0.2)',
+    backgroundColor: 'rgba(171, 95, 95, 0.2)',
     paddingHorizontal: width * 0.05,
     paddingVertical: height * 0.01,
     borderRadius: width * 0.05,
@@ -2131,7 +2133,7 @@ const styles = StyleSheet.create({
   frequency: {
     fontSize: width * 0.04,
     fontWeight: 'bold',
-    color: '#171616ff',
+    color: '#454545ff',
   },
   
   menuGrid: {
@@ -3161,7 +3163,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
     backgroundColor: '#fff',
-    maxHeight: 280,
+    maxHeight: 400,
   },
 
   dropdownItem: {
@@ -3207,13 +3209,17 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 50 : 50,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom:20,
+    backgroundColor:'green',
+    borderBottomLeftRadius: 110,
+    borderBottomRightRadius:110,
   },
   
   headerImageContainer: {
-    marginBottom: height * 0.015,
+    marginBottom: height * 0.00009,
+   
   },
   
   headerImage: {
@@ -3223,10 +3229,10 @@ const styles = StyleSheet.create({
   },
   
   sectionTitle: {
-    fontSize: width * 0.055,
+    fontSize: width * 0.050,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: height * 0.015,
+    marginTop: height * 0.009,
     textAlign: 'center',
   },
   
@@ -3344,6 +3350,7 @@ const styles = StyleSheet.create({
   // Donation Screen
   donationContainer: {
     flex: 1,
+
   },
   
   donationHeader: {
@@ -3353,6 +3360,8 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
     paddingBottom: 20,
+    borderBottomLeftRadius:100,
+   
   },
   
   donationTitle: {
@@ -3363,6 +3372,7 @@ const styles = StyleSheet.create({
   
   donationContent: {
     padding: 20,
+    
   },
   
   donationCard: {
@@ -3635,7 +3645,7 @@ const styles = StyleSheet.create({
   thankYouText: {
     fontSize: width * 0.042,
     fontWeight: '600',
-    color: '#2e7d32',
+    color: '#000000ff',
     textAlign: 'center',
     lineHeight: width * 0.055,
   },
